@@ -316,8 +316,15 @@ html, body {
   position: absolute; top: 54px; right: 8px;
   font-family: 'JetBrains Mono', monospace; font-size: 11px;
   color: var(--text-dim); background: var(--bg-surface);
-  padding: 4px 8px; border-radius: 6px; z-index: 20; opacity: 0.7;
+  padding: 6px 10px; border-radius: 6px; z-index: 20; opacity: 0.85;
+  line-height: 1.6; min-width: 180px;
 }
+#pitch-debug .detected { color: var(--accent); font-weight: 700; }
+#pitch-debug .rms-bar {
+  display: inline-block; height: 6px; background: var(--accent);
+  border-radius: 3px; vertical-align: middle; transition: width 0.05s;
+}
+#pitch-debug .rms-bar.low { background: var(--red); }
 
 @media (max-width: 600px) {
   .song-grid { grid-template-columns: 1fr; }
@@ -641,22 +648,34 @@ class PitchDetector {
     this.mediaStream = null; this.buffer = null;
     this.isActive = false; this.lastDetectedMidi = -1;
     this.onNoteDetected = null;
-    this.threshold = 0.12;
+    this.onDebugUpdate = null; // 디버그 콜백: (info) => {}
+    this.threshold = 0.20; // YIN 임계값 (0.12→0.20 완화: 실제 환경 잡음 대응)
     this._rafId = null;
     this._lastNoteMidi = -1;
-    this._stableCount = 0;
+    this._lastNoteTime = 0;
+    this._rms = 0;
   }
 
   async start() {
     try {
       this.mediaStream = await navigator.mediaDevices.getUserMedia({
-        audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: false }
+        audio: {
+          echoCancellation: false, // 피아노 음색 왜곡 방지
+          noiseSuppression: false, // 피아노 배음 제거 방지
+          autoGainControl: true,   // 음량 자동 조절 ON (소리가 작을 수 있으므로)
+        }
       });
       this.audioCtx = new (window.AudioContext || window.webkitAudioContext)();
       const src = this.audioCtx.createMediaStreamSource(this.mediaStream);
+
+      // ── AnalyserNode 설정 ──
+      // fftSize=4096: 48kHz 기준 ~85ms 윈도우
+      // → 최저 감지 가능 주파수 ≈ 48000/2048 ≈ 23Hz (A0=27Hz 커버)
       this.analyser = this.audioCtx.createAnalyser();
-      this.analyser.fftSize = 2048; // 주파수 해상도 확보
+      this.analyser.fftSize = 4096; // 2048→4096: 저음역 해상도 2배 향상
+      this.analyser.smoothingTimeConstant = 0; // 스무딩 OFF (즉각 반응)
       src.connect(this.analyser);
+
       this.buffer = new Float32Array(this.analyser.fftSize);
       this.isActive = true;
       this._detect();
@@ -676,49 +695,59 @@ class PitchDetector {
     if (!this.isActive) return;
     this.analyser.getFloatTimeDomainData(this.buffer);
 
-    // RMS 볼륨 체크
+    // ── RMS 볼륨 계산 ──
     let rms = 0;
     for (let i = 0; i < this.buffer.length; i++) rms += this.buffer[i] ** 2;
     rms = Math.sqrt(rms / this.buffer.length);
+    this._rms = rms;
 
-    if (rms > 0.01) {
+    // RMS 임계값: 0.01→0.003 (마이크가 멀거나 소리가 작아도 감지)
+    if (rms > 0.003) {
       const pitch = this._yinDetect(this.buffer, this.audioCtx.sampleRate);
       if (pitch > 0) {
         const midi = NoteUtils.freqToMidi(pitch);
         if (midi >= 21 && midi <= 108) {
-          // 안정성: 같은 음이 2프레임 연속이면 콜백
-          if (midi === this._lastNoteMidi) {
-            this._stableCount++;
-          } else {
-            this._lastNoteMidi = midi;
-            this._stableCount = 1;
+          this.lastDetectedMidi = midi;
+          // 디버그 정보 전달
+          if (this.onDebugUpdate) {
+            this.onDebugUpdate({ midi, freq: pitch, rms, noteName: NoteUtils.midiToName(midi), detected: true });
           }
-          if (this._stableCount >= 2) {
-            this.lastDetectedMidi = midi;
-            if (this.onNoteDetected) this.onNoteDetected(midi);
-          }
+          // 즉시 콜백 (안정성 필터 제거 → 반응성 우선)
+          if (this.onNoteDetected) this.onNoteDetected(midi);
+        }
+      } else {
+        // 피치 감지 실패 (소리는 있지만 음 판별 불가)
+        if (this.onDebugUpdate) {
+          this.onDebugUpdate({ midi: -1, freq: -1, rms, noteName: '--', detected: false });
         }
       }
     } else {
       this.lastDetectedMidi = -1;
-      this._lastNoteMidi = -1;
-      this._stableCount = 0;
+      if (this.onDebugUpdate) {
+        this.onDebugUpdate({ midi: -1, freq: -1, rms, noteName: '--', detected: false });
+      }
     }
     this._rafId = requestAnimationFrame(() => this._detect());
   }
 
   /**
-   * YIN 피치 감지 구현
+   * YIN 피치 감지 구현 (개선 버전)
+   *
+   * 개선점:
+   * - 버퍼 4096 → half=2048로 저음역 해상도 향상
+   * - threshold 0.20으로 완화 (실환경 잡음 대응)
+   * - global minimum fallback: threshold 이하 valley 없으면
+   *   전체에서 가장 작은 d'(τ)를 사용 (0.4 이하일 때만)
+   *
    * @param {Float32Array} buf - 시간 도메인 오디오 버퍼
    * @param {number} sr - 샘플레이트
    * @returns {number} 추정 주파수(Hz), 실패시 -1
    */
   _yinDetect(buf, sr) {
     const half = buf.length >> 1;
-    const d = new Float32Array(half); // 차분 함수 버퍼
+    const d = new Float32Array(half);
 
     // ── Step 1: 차분 함수 ──
-    // d(τ) = Σ_{j=0}^{W-1} (x[j] - x[j+τ])²
     for (let tau = 0; tau < half; tau++) {
       let sum = 0;
       for (let j = 0; j < half; j++) {
@@ -728,41 +757,49 @@ class PitchDetector {
       d[tau] = sum;
     }
 
-    // ── Step 2: CMNDF (Cumulative Mean Normalized Difference) ──
-    // d'(0) = 1, d'(τ) = d(τ) / ((1/τ) * Σd(j)) for j=1..τ
-    // 핵심: 순수 autocorrelation 대비 옥타브 에러 크게 감소
+    // ── Step 2: CMNDF ──
     d[0] = 1;
     let running = 0;
     for (let tau = 1; tau < half; tau++) {
       running += d[tau];
+      if (running === 0) { d[tau] = 1; continue; } // division by zero 방지
       d[tau] = d[tau] * tau / running;
     }
 
-    // ── Step 3: 절대 임계값으로 첫 번째 valley 탐색 ──
-    const tauMin = Math.floor(sr / 4200); // 최고 ~4186Hz (C8)
-    const tauMax = Math.min(half, Math.floor(sr / 50)); // 최저 50Hz
+    // ── Step 3: 절대 임계값 탐색 + Global Minimum Fallback ──
+    const tauMin = Math.max(2, Math.floor(sr / 4200));
+    const tauMax = Math.min(half, Math.floor(sr / 50));
     let bestTau = -1;
+    let globalMinTau = tauMin;
+    let globalMinVal = d[tauMin];
 
     for (let tau = tauMin; tau < tauMax; tau++) {
+      // Global minimum 추적
+      if (d[tau] < globalMinVal) {
+        globalMinVal = d[tau];
+        globalMinTau = tau;
+      }
+
       if (d[tau] < this.threshold) {
-        // valley의 바닥까지 더 진행
         while (tau + 1 < tauMax && d[tau + 1] < d[tau]) tau++;
         bestTau = tau;
         break;
       }
     }
+
+    // Fallback: threshold 이하 valley 없으면 global min 사용 (0.4 이하만)
+    if (bestTau === -1 && globalMinVal < 0.4) {
+      bestTau = globalMinTau;
+    }
     if (bestTau === -1) return -1;
 
-    // ── Step 4: 포물선 보간 (Parabolic Interpolation) ──
-    // 정수 τ 주변 3점 (τ-1, τ, τ+1)으로 포물선 피팅
-    // 꼭짓점: τ_refined = τ + (x0 - x2) / (2(x0 - 2x1 + x2))
+    // ── Step 4: 포물선 보간 ──
     const x0 = bestTau > 0 ? d[bestTau - 1] : d[bestTau];
     const x1 = d[bestTau];
     const x2 = bestTau + 1 < half ? d[bestTau + 1] : d[bestTau];
     const denom = 2 * (x0 - 2 * x1 + x2);
     const refined = denom !== 0 ? bestTau + (x0 - x2) / denom : bestTau;
 
-    // ── Step 5: 주파수 = sampleRate / period ──
     return sr / refined;
   }
 }
@@ -1327,15 +1364,30 @@ class App {
   async _hookInput() {
     if (this.inputMode === 'mic') {
       if (!this.pitch.isActive) await this.pitch.start();
+
+      // 실시간 디버그 표시 (RMS 레벨 + 감지된 음)
+      this.el.pitchDbg.classList.remove('hidden');
+      this.pitch.onDebugUpdate = (info) => {
+        const rmsWidth = Math.min(100, Math.round(info.rms * 3000));
+        const rmsClass = info.rms < 0.003 ? 'low' : '';
+        if (info.detected) {
+          this.el.pitchDbg.innerHTML =
+            `MIC <span class="rms-bar ${rmsClass}" style="width:${rmsWidth}px"></span> ${info.rms.toFixed(4)}<br>` +
+            `<span class="detected">♪ ${info.noteName} (${Math.round(info.freq)}Hz)</span>`;
+        } else {
+          this.el.pitchDbg.innerHTML =
+            `MIC <span class="rms-bar ${rmsClass}" style="width:${rmsWidth}px"></span> ${info.rms.toFixed(4)}<br>` +
+            `감지 대기 중...`;
+        }
+      };
+
       this.pitch.onNoteDetected = (midi) => {
-        this.el.pitchDbg.classList.remove('hidden');
-        this.el.pitchDbg.textContent = `PITCH: ${NoteUtils.midiToName(midi)} (${Math.round(NoteUtils.midiToFreq(midi))}Hz)`;
         this.kb.highlightKey(midi);
         setTimeout(() => this.kb.unhighlightKey(midi), 150);
 
-        // 마이크 디바운스: 같은 음 200ms 이내 재감지 방지
+        // 디바운스: 같은 음 100ms 이내 재감지 방지 (200→100ms)
         const now = performance.now();
-        if (this._micDebounce[midi] && now - this._micDebounce[midi] < 200) return;
+        if (this._micDebounce[midi] && now - this._micDebounce[midi] < 100) return;
         this._micDebounce[midi] = now;
         this._onKey(midi);
       };
@@ -1450,6 +1502,7 @@ class App {
     this.game.stop();
     if (this._raf) cancelAnimationFrame(this._raf);
     this.pitch.onNoteDetected = null;
+    this.pitch.onDebugUpdate = null;
     this.midi.onNoteOn = null; this.midi.onNoteOff = null;
     ['menu'].forEach(k => this.el[k].classList.remove('hidden'));
     ['game','header','pause','countdown','results','pitchDbg'].forEach(k => this.el[k]?.classList.add('hidden'));
