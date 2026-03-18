@@ -326,6 +326,40 @@ html, body {
 }
 #pitch-debug .rms-bar.low { background: var(--red); }
 
+/* ═══ WAIT MODE INDICATORS ═══ */
+.key.waiting-pulse {
+  animation: waitPulse 0.8s ease-in-out infinite;
+}
+.key.white.waiting-pulse {
+  box-shadow: 0 0 20px rgba(0,232,176,0.6) inset, 0 0 30px rgba(0,232,176,0.3);
+}
+.key.black.waiting-pulse {
+  box-shadow: 0 0 16px rgba(0,232,176,0.6) inset, 0 0 24px rgba(0,232,176,0.3);
+}
+@keyframes waitPulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.5; }
+}
+
+#wait-hint {
+  display: none;
+  position: absolute; bottom: 16px; left: 50%;
+  transform: translateX(-50%);
+  font-family: 'DM Sans', sans-serif;
+  font-size: 16px; font-weight: 700;
+  color: var(--accent);
+  background: rgba(0,232,176,0.1);
+  border: 1px solid rgba(0,232,176,0.3);
+  padding: 8px 20px; border-radius: 12px;
+  z-index: 8; white-space: nowrap;
+  animation: hintFadeIn 0.3s ease-out;
+  text-shadow: 0 0 10px var(--accent-glow);
+}
+@keyframes hintFadeIn {
+  from { opacity: 0; transform: translateX(-50%) translateY(10px); }
+  to { opacity: 1; transform: translateX(-50%) translateY(0); }
+}
+
 @media (max-width: 600px) {
   .song-grid { grid-template-columns: 1fr; }
   .results-card { padding: 24px 20px; }
@@ -1099,11 +1133,48 @@ class GameEngine {
     this.startTime = 0; this.currentTime = 0;
     this.isPlaying = false; this.isPaused = false;
     this.pauseStart = 0; this.totalPause = 0;
+    // 판정 윈도우 (기본값 — setTimingMode()로 변경)
     this.PERFECT = 120; this.GOOD = 250; this.MISS_T = 350;
     this.score = 0; this.combo = 0; this.maxCombo = 0;
     this.perfects = 0; this.goods = 0; this.misses = 0;
     this.totalNotes = 0; this.particles = [];
     this.onScoreUpdate = null; this.onJudgment = null; this.onSongEnd = null;
+
+    // ── Wait Mode (Simply Piano 핵심 메커니즘) ──
+    // 활성화 시: 다음 노트가 판정선에 도달하면 시간을 멈추고
+    //           올바른 음이 입력될 때까지 대기
+    this.waitMode = false;
+    this.isWaiting = false;      // 현재 대기 중인지
+    this.waitStartTime = 0;      // 대기 시작 시점
+    this.totalWaitTime = 0;      // 누적 대기 시간
+    this.waitingForNote = null;  // 현재 대기 중인 노트
+    this.onWaitStart = null;     // 대기 시작 콜백
+    this.onWaitEnd = null;       // 대기 종료 콜백
+  }
+
+  /**
+   * 입력 모드별 타이밍 설정
+   * 마이크: 레이턴시 보상을 위해 윈도우 확대 + Wait Mode
+   * MIDI: 약간 관대하게
+   * 가상건반: 기본값
+   */
+  setTimingMode(mode) {
+    if (mode === 'mic') {
+      this.PERFECT = 400;   // 120→400ms (피치 감지 레이턴시 보상)
+      this.GOOD = 700;      // 250→700ms
+      this.MISS_T = 1000;   // 350→1000ms
+      this.waitMode = true; // 마이크는 Wait Mode 기본 ON
+    } else if (mode === 'midi') {
+      this.PERFECT = 150;
+      this.GOOD = 300;
+      this.MISS_T = 450;
+      this.waitMode = false;
+    } else {
+      this.PERFECT = 120;
+      this.GOOD = 250;
+      this.MISS_T = 350;
+      this.waitMode = false;
+    }
   }
 
   loadSong(song) {
@@ -1115,24 +1186,58 @@ class GameEngine {
     this.score = 0; this.combo = 0; this.maxCombo = 0;
     this.perfects = 0; this.goods = 0; this.misses = 0;
     this.particles = []; this.totalPause = 0;
+    this.totalWaitTime = 0; this.isWaiting = false; this.waitingForNote = null;
   }
 
   start() { this.startTime = performance.now(); this.isPlaying = true; this.isPaused = false; }
   pause() { if (!this.isPlaying || this.isPaused) return; this.isPaused = true; this.pauseStart = performance.now(); }
   resume() { if (!this.isPaused) return; this.totalPause += performance.now() - this.pauseStart; this.isPaused = false; }
-  stop() { this.isPlaying = false; }
+  stop() { this.isPlaying = false; this.isWaiting = false; }
+
+  /** 다음 미판정 노트 가져오기 */
+  _getNextPendingNote() {
+    return this.notes.find(n => !n.judged);
+  }
 
   update(ts) {
     if (!this.isPlaying || this.isPaused) return;
-    this.currentTime = ts - this.startTime - this.totalPause;
 
-    // 자동 miss
-    for (const n of this.notes) {
-      if (n.judged) continue;
-      if (this.currentTime - n.time > this.MISS_T) {
-        n.state = 'miss'; n.judged = true; this.misses++; this.combo = 0;
-        this.onJudgment?.('miss', n);
-        this.onScoreUpdate?.();
+    // Wait Mode에서 대기 중이면 게임 시간 동결
+    if (this.isWaiting) {
+      // currentTime은 대기 시작 시점에 고정
+      // (렌더러가 노트를 판정선 위치에 고정시킴)
+      return;
+    }
+
+    this.currentTime = ts - this.startTime - this.totalPause - this.totalWaitTime;
+
+    // ── Wait Mode: 다음 노트가 판정선에 도달하면 대기 ──
+    if (this.waitMode) {
+      const nextNote = this._getNextPendingNote();
+      if (nextNote) {
+        const timeDiff = this.currentTime - nextNote.time;
+        // 노트가 판정선에 도달했거나 약간 지났을 때 (50ms 여유)
+        if (timeDiff >= -50) {
+          this.isWaiting = true;
+          this.waitStartTime = ts;
+          this.waitingForNote = nextNote;
+          // 시간 고정: 노트가 정확히 판정선에 위치하도록
+          this.currentTime = nextNote.time;
+          if (this.onWaitStart) this.onWaitStart(nextNote);
+          return;
+        }
+      }
+    }
+
+    // ── 자동 miss (Wait Mode가 아닐 때만) ──
+    if (!this.waitMode) {
+      for (const n of this.notes) {
+        if (n.judged) continue;
+        if (this.currentTime - n.time > this.MISS_T) {
+          n.state = 'miss'; n.judged = true; this.misses++; this.combo = 0;
+          this.onJudgment?.('miss', n);
+          this.onScoreUpdate?.();
+        }
       }
     }
 
@@ -1156,6 +1261,38 @@ class GameEngine {
   judgeInput(midiNote) {
     if (!this.isPlaying || this.isPaused) return null;
 
+    // ── Wait Mode 판정: 대기 중인 노트와 비교 ──
+    if (this.waitMode && this.isWaiting && this.waitingForNote) {
+      const wNote = this.waitingForNote;
+      if (wNote.midi === midiNote) {
+        // 정답! Wait Mode에서는 맞추면 무조건 Perfect
+        wNote.state = 'hit'; wNote.judged = true;
+        this.perfects++;
+        this.score += 100 * (1 + this.combo * 0.1);
+        this.combo++;
+        this.maxCombo = Math.max(this.maxCombo, this.combo);
+        this.score = Math.round(this.score);
+
+        // 대기 해제 → 누적 대기 시간에 더함
+        this.isWaiting = false;
+        this.totalWaitTime += performance.now() - this.waitStartTime;
+        this.waitingForNote = null;
+
+        this._spawnParticles(wNote, 'perfect');
+        this.onJudgment?.('perfect', wNote);
+        this.onScoreUpdate?.();
+        if (this.onWaitEnd) this.onWaitEnd(wNote);
+
+        return { judgment: 'perfect', note: wNote };
+      } else {
+        // 틀린 음 → 시각적 피드백만 (miss 처리하지 않고 계속 대기)
+        this.onJudgment?.('wrong_note', { note: NoteUtils.midiToName(midiNote), midi: midiNote,
+          expected: wNote.note, expectedMidi: wNote.midi });
+        return null;
+      }
+    }
+
+    // ── 일반 모드 판정 (가상건반, MIDI, 또는 Wait Mode가 아닌 상태) ──
     let best = null, bestDiff = Infinity;
     for (const n of this.notes) {
       if (n.judged || n.midi !== midiNote) continue;
@@ -1176,18 +1313,20 @@ class GameEngine {
     this.maxCombo = Math.max(this.maxCombo, this.combo);
     this.score = Math.round(this.score);
 
-    // 파티클
+    this._spawnParticles(best, type);
+    this.onJudgment?.(type, best);
+    this.onScoreUpdate?.();
+    return { judgment: type, note: best };
+  }
+
+  _spawnParticles(note, type) {
     const col = type === 'perfect' ? '#00e8b0' : '#facc15';
     for (let i = 0; i < 8; i++) {
       this.particles.push({
         x: 0, y: 0, vx: (Math.random()-0.5)*6, vy: -Math.random()*4-2,
-        size: Math.random()*4+2, alpha: 1, color: col, noteMidi: best.midi, _posSet: false
+        size: Math.random()*4+2, alpha: 1, color: col, noteMidi: note.midi, _posSet: false
       });
     }
-
-    this.onJudgment?.(type, best);
-    this.onScoreUpdate?.();
-    return { judgment: type, note: best };
   }
 
   getAccuracy() {
@@ -1315,6 +1454,7 @@ class App {
 
     this._showGame(lo, hi);
     this.game.loadSong(song);
+    this.game.setTimingMode(this.inputMode); // 입력 모드별 타이밍 설정
     this._hookGame();
     await this._hookInput();
     this._countdown(() => { this.game.start(); this._loop(); });
@@ -1352,6 +1492,13 @@ class App {
       this.el.hAcc.textContent = this.game.getAccuracy() + '%';
     };
     this.game.onJudgment = (type, note) => {
+      if (type === 'wrong_note') {
+        // 틀린 음: 건반 빨간색 피드백 + 기대 음 표시
+        this.kb.highlightKey(note.midi, 'target-miss');
+        setTimeout(() => this.kb.unhighlightKey(note.midi, 'target-miss'), 300);
+        this._popup('wrong', note);
+        return;
+      }
       this._popup(type);
       if (type !== 'miss') {
         this.kb.highlightKey(note.midi, 'target-hit');
@@ -1359,6 +1506,14 @@ class App {
       }
     };
     this.game.onSongEnd = () => setTimeout(() => this._showResults(), 800);
+
+    // Wait Mode 콜백: 대기 시작 시 기대 음의 건반을 깜빡임으로 표시
+    this.game.onWaitStart = (note) => {
+      this._showExpectedNote(note);
+    };
+    this.game.onWaitEnd = (note) => {
+      this._hideExpectedNote();
+    };
   }
 
   async _hookInput() {
@@ -1407,7 +1562,10 @@ class App {
     if (this.inputMode === 'virtual') this.audio.playNote(midi, 0.6, 0.5);
     if (this.game.isPlaying && !this.game.isPaused) {
       const r = this.game.judgeInput(midi);
-      if (r && r.judgment !== 'miss') this.audio.playFx('perfect');
+      // 마이크 모드에서는 효과음 재생 안 함 (마이크 피드백 방지)
+      if (r && r.judgment !== 'miss' && this.inputMode !== 'mic') {
+        this.audio.playFx('perfect');
+      }
     }
   }
   _onKeyUp(midi) {}
@@ -1435,7 +1593,8 @@ class App {
 
   // ── Game Loop ──
   _loop() {
-    if (!this.game.isPlaying && !this.game.isPaused) return;
+    // Keep running during wait mode (for rendering), only stop on game end
+    if (!this.game.isPlaying && !this.game.isPaused && !this.game.isWaiting) return;
     this.game.update(performance.now());
 
     if (this.renderer) {
@@ -1452,16 +1611,49 @@ class App {
     this._raf = requestAnimationFrame(() => this._loop());
   }
 
-  _popup(type) {
+  _popup(type, extra) {
     const wrap = document.getElementById('canvas-wrap');
     const p = document.createElement('div');
     p.className = 'judge-popup';
     if (type === 'perfect') { p.textContent = 'Perfect!'; p.style.color = '#00e8b0'; }
     else if (type === 'good') { p.textContent = 'Good'; p.style.color = '#facc15'; }
+    else if (type === 'wrong') {
+      // 틀린 음 표시 + 기대 음 안내
+      const expected = extra?.expected || '?';
+      p.textContent = `✕ → ${expected}`;
+      p.style.color = '#f43f5e';
+      p.style.fontSize = '22px';
+    }
     else { p.textContent = 'Miss'; p.style.color = '#f43f5e'; }
     p.style.bottom = '20px';
     wrap.appendChild(p);
     setTimeout(() => p.remove(), 600);
+  }
+
+  /** Wait Mode: 기대 음의 건반을 깜빡이며 표시 */
+  _showExpectedNote(note) {
+    this._hideExpectedNote(); // 이전 표시 제거
+    const midi = note.midi;
+    const el = this.kb?.keyEls?.[midi];
+    if (el) {
+      el.classList.add('waiting-pulse');
+    }
+    // 캔버스 위에 기대 음 힌트 표시
+    let hint = document.getElementById('wait-hint');
+    if (!hint) {
+      hint = document.createElement('div');
+      hint.id = 'wait-hint';
+      document.getElementById('canvas-wrap').appendChild(hint);
+    }
+    hint.textContent = `♪ ${note.note} 을(를) 연주하세요`;
+    hint.style.display = 'block';
+  }
+
+  _hideExpectedNote() {
+    // 건반 깜빡임 제거
+    document.querySelectorAll('.waiting-pulse').forEach(el => el.classList.remove('waiting-pulse'));
+    const hint = document.getElementById('wait-hint');
+    if (hint) hint.style.display = 'none';
   }
 
   // ── Controls ──
@@ -1479,7 +1671,9 @@ class App {
     document.getElementById('btn-retry').onclick = () => {
       if (this.currentSong) {
         this.el.results.classList.add('hidden');
+        this._hideExpectedNote();
         this.game.loadSong(this.currentSong);
+        this.game.setTimingMode(this.inputMode);
         this._hookGame();
         this.el.hScore.textContent = '0'; this.el.hCombo.textContent = '0'; this.el.hAcc.textContent = '100%';
         this._countdown(() => { this.game.start(); this._loop(); });
@@ -1501,6 +1695,7 @@ class App {
   _toMenu() {
     this.game.stop();
     if (this._raf) cancelAnimationFrame(this._raf);
+    this._hideExpectedNote();
     this.pitch.onNoteDetected = null;
     this.pitch.onDebugUpdate = null;
     this.midi.onNoteOn = null; this.midi.onNoteOff = null;
