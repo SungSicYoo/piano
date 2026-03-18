@@ -1,0 +1,1478 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>Piano Flow — 피아노 연습</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,300;9..40,500;9..40,700;9..40,800&family=JetBrains+Mono:wght@400;700&display=swap" rel="stylesheet">
+<style>
+/* ═══════════════════════════════════════════
+   CSS — Dark Neon Aesthetic
+   ═══════════════════════════════════════════ */
+:root {
+  --bg-deep: #06060e;
+  --bg: #0c0c18;
+  --bg-surface: #141428;
+  --bg-elevated: #1c1c3a;
+  --border: rgba(255,255,255,0.06);
+  --accent: #00e8b0;
+  --accent-glow: rgba(0,232,176,0.25);
+  --purple: #8b5cf6;
+  --pink: #f472b6;
+  --blue: #38bdf8;
+  --orange: #fb923c;
+  --red: #f43f5e;
+  --yellow: #facc15;
+  --text: #e4e4f0;
+  --text-dim: #5a5a80;
+  --text-muted: #3a3a5a;
+}
+
+*, *::before, *::after { margin:0; padding:0; box-sizing:border-box; }
+html, body {
+  width:100%; height:100%; overflow:hidden;
+  background: var(--bg-deep);
+  color: var(--text);
+  font-family: 'DM Sans', sans-serif;
+  touch-action: none;
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.mono { font-family: 'JetBrains Mono', monospace; }
+.hidden { display: none !important; }
+
+/* ── App Layout ── */
+#app {
+  display: flex; flex-direction: column;
+  height: 100vh; height: 100dvh;
+  width: 100vw;
+  position: relative; overflow: hidden;
+}
+#app::before {
+  content: ''; position: fixed; top: -30%; left: -10%;
+  width: 60%; height: 60%;
+  background: radial-gradient(ellipse, rgba(0,232,176,0.04) 0%, transparent 70%);
+  pointer-events: none; z-index: 0;
+}
+
+/* ═══ HEADER ═══ */
+#header {
+  display: flex; align-items: center; justify-content: space-between;
+  height: 48px; padding: 0 16px;
+  background: var(--bg);
+  border-bottom: 1px solid var(--border);
+  position: relative; z-index: 10; flex-shrink: 0;
+}
+#header .logo { font-size: 17px; font-weight: 800; letter-spacing: -0.5px; }
+#header .logo em {
+  font-style: normal;
+  background: linear-gradient(90deg, var(--accent), var(--purple));
+  -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+}
+.hud { display: flex; gap: 12px; align-items: center; }
+.hud-item {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 12px; padding: 3px 10px;
+  background: var(--bg-surface);
+  border: 1px solid var(--border); border-radius: 8px;
+}
+.hud-item .label { color: var(--text-dim); margin-right: 4px; }
+.hud-item .val { font-weight: 700; }
+.hud-item .val.score { color: var(--accent); }
+.hud-item .val.combo { color: var(--pink); }
+.hud-item .val.accuracy { color: var(--blue); }
+.btn-icon {
+  width: 34px; height: 34px; border-radius: 8px;
+  border: 1px solid var(--border); background: var(--bg-surface);
+  color: var(--text-dim); display: flex; align-items: center;
+  justify-content: center; cursor: pointer; font-size: 16px;
+  transition: all 0.15s;
+}
+.btn-icon:hover { border-color: var(--accent); color: var(--accent); }
+
+/* ═══ MENU SCREEN ═══ */
+#menu-screen {
+  position: absolute; inset: 0; z-index: 100;
+  display: flex; flex-direction: column;
+  align-items: center; justify-content: center;
+  background: var(--bg-deep); padding: 20px;
+  overflow-y: auto;
+}
+#menu-screen .brand {
+  font-size: clamp(36px, 8vw, 56px);
+  font-weight: 800; letter-spacing: -2px; margin-bottom: 4px;
+  background: linear-gradient(135deg, var(--accent) 0%, var(--purple) 50%, var(--pink) 100%);
+  -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+}
+#menu-screen .subtitle { color: var(--text-dim); font-size: 15px; margin-bottom: 28px; }
+.input-mode-section { display: flex; gap: 10px; margin-bottom: 24px; flex-wrap: wrap; justify-content: center; }
+.input-mode-btn {
+  padding: 10px 22px; border-radius: 12px;
+  border: 1px solid var(--border); background: var(--bg-surface);
+  color: var(--text-dim); font-family: 'DM Sans', sans-serif;
+  font-size: 14px; font-weight: 500; cursor: pointer; transition: all 0.2s;
+}
+.input-mode-btn.active {
+  border-color: var(--accent); color: var(--accent);
+  background: rgba(0,232,176,0.08);
+  box-shadow: 0 0 16px var(--accent-glow);
+}
+.input-mode-btn:hover:not(.active) { border-color: rgba(255,255,255,0.15); color: var(--text); }
+.input-mode-btn .ico { font-size: 18px; margin-right: 6px; }
+
+.song-grid {
+  display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  gap: 10px; width: 100%; max-width: 780px;
+}
+.song-card {
+  background: var(--bg-surface); border: 1px solid var(--border);
+  border-radius: 14px; padding: 16px 18px;
+  cursor: pointer; transition: all 0.2s ease;
+  position: relative; overflow: hidden;
+}
+.song-card::before {
+  content: ''; position: absolute; top: 0; left: 0; right: 0; height: 3px;
+  background: linear-gradient(90deg, var(--accent), var(--purple));
+  opacity: 0; transition: opacity 0.2s;
+}
+.song-card:hover::before, .song-card:active::before { opacity: 1; }
+.song-card:hover {
+  border-color: rgba(255,255,255,0.12); transform: translateY(-2px);
+  box-shadow: 0 8px 24px rgba(0,0,0,0.3);
+}
+.song-card .s-title { font-size: 16px; font-weight: 700; margin-bottom: 3px; }
+.song-card .s-meta { font-size: 12px; color: var(--text-dim); }
+.song-card .s-diff {
+  display: inline-block; margin-top: 8px; padding: 2px 10px;
+  border-radius: 8px; font-size: 11px; font-weight: 600;
+}
+.diff-easy { background: rgba(0,232,176,0.12); color: var(--accent); }
+.diff-mid { background: rgba(251,146,60,0.12); color: var(--orange); }
+.diff-hard { background: rgba(244,63,94,0.12); color: var(--red); }
+.song-card.free-play { border: 1px dashed rgba(255,255,255,0.12); background: rgba(139,92,246,0.05); }
+.status-bar {
+  margin-top: 18px; padding: 8px 14px; background: var(--bg-surface);
+  border-radius: 10px; font-size: 12px; color: var(--text-dim);
+  display: flex; align-items: center; gap: 8px;
+}
+.status-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--text-muted); }
+.status-dot.connected { background: var(--accent); box-shadow: 0 0 6px var(--accent-glow); }
+
+/* ═══ GAME AREA ═══ */
+#game-area {
+  flex: 1; display: flex; flex-direction: column;
+  position: relative; z-index: 1; min-height: 0;
+}
+#canvas-wrap {
+  flex: 1; position: relative; min-height: 0; background: var(--bg);
+}
+#note-canvas { width: 100%; height: 100%; display: block; }
+#canvas-wrap::after {
+  content: ''; position: absolute; bottom: 0; left: 0; right: 0; height: 3px;
+  background: var(--accent);
+  box-shadow: 0 0 12px var(--accent-glow), 0 0 30px var(--accent-glow);
+  z-index: 2;
+}
+.judge-popup {
+  position: absolute; left: 50%; transform: translateX(-50%);
+  font-family: 'DM Sans', sans-serif; font-weight: 800; font-size: 28px;
+  pointer-events: none; z-index: 10;
+  animation: judgePop 0.6s ease-out forwards;
+  text-shadow: 0 0 20px currentColor;
+}
+@keyframes judgePop {
+  0% { opacity:1; transform: translateX(-50%) translateY(0) scale(1.3); }
+  60% { opacity:1; }
+  100% { opacity:0; transform: translateX(-50%) translateY(-50px) scale(0.8); }
+}
+
+/* ═══ VIRTUAL PIANO ═══ */
+#piano-container {
+  flex-shrink: 0; background: var(--bg);
+  border-top: 1px solid var(--border);
+  position: relative; z-index: 5;
+}
+#piano {
+  display: flex; height: clamp(90px, 18vh, 150px);
+  position: relative; margin: 0 auto;
+}
+.key {
+  position: relative; flex: 1;
+  border: 1px solid rgba(0,0,0,0.15); border-top: none;
+  cursor: pointer; transition: background 0.06s;
+  display: flex; align-items: flex-end;
+  justify-content: center; padding-bottom: 6px; z-index: 1;
+}
+.key.white {
+  background: linear-gradient(180deg, #fafafa 0%, #e8e8ee 100%);
+  border-radius: 0 0 6px 6px;
+  border-right: 1px solid rgba(0,0,0,0.08);
+}
+.key.white .key-label {
+  font-size: 10px; font-weight: 500; color: rgba(0,0,0,0.3);
+  font-family: 'JetBrains Mono', monospace;
+}
+.key.white.active {
+  background: linear-gradient(180deg, #00e8b0 0%, #00c49a 100%);
+}
+.key.white.active .key-label { color: rgba(0,0,0,0.7); }
+.key.white.target-hit {
+  background: linear-gradient(180deg, #00e8b0 0%, #00c49a 100%);
+  box-shadow: 0 0 20px rgba(0,232,176,0.5) inset;
+}
+.key.white.target-miss {
+  background: linear-gradient(180deg, #f43f5e 0%, #dc2626 100%);
+}
+.key.black {
+  position: absolute; width: 8%; height: 60%;
+  background: linear-gradient(180deg, #2a2a40 0%, #18182a 100%);
+  border-radius: 0 0 4px 4px; z-index: 2;
+  box-shadow: 0 4px 8px rgba(0,0,0,0.5);
+}
+.key.black .key-label {
+  font-size: 8px; font-weight: 500; color: rgba(255,255,255,0.2);
+  font-family: 'JetBrains Mono', monospace;
+}
+.key.black.active {
+  background: linear-gradient(180deg, #8b5cf6 0%, #6d28d9 100%);
+  box-shadow: 0 2px 4px rgba(0,0,0,0.5);
+}
+.key.black.target-hit {
+  background: linear-gradient(180deg, #00e8b0 0%, #00c49a 100%);
+  box-shadow: 0 0 16px rgba(0,232,176,0.4) inset;
+}
+
+/* ═══ OVERLAYS ═══ */
+#results-screen {
+  position: absolute; inset: 0; z-index: 100;
+  display: flex; flex-direction: column;
+  align-items: center; justify-content: center;
+  background: rgba(6,6,14,0.95); backdrop-filter: blur(12px); padding: 20px;
+}
+.results-card {
+  background: var(--bg-surface); border: 1px solid var(--border);
+  border-radius: 20px; padding: 32px 40px; text-align: center;
+  max-width: 400px; width: 100%;
+}
+.results-card h2 { font-size: 28px; font-weight: 800; margin-bottom: 4px; }
+.results-card .song-name { color: var(--text-dim); font-size: 14px; margin-bottom: 24px; }
+.results-stats {
+  display: grid; grid-template-columns: 1fr 1fr 1fr;
+  gap: 16px; margin-bottom: 28px;
+}
+.results-stats .stat { text-align: center; }
+.results-stats .stat .num {
+  font-family: 'JetBrains Mono', monospace; font-size: 28px; font-weight: 700;
+}
+.results-stats .stat .lbl { font-size: 11px; color: var(--text-dim); margin-top: 2px; }
+.grade { font-size: 64px; font-weight: 800; margin-bottom: 20px; }
+.grade-s { color: var(--accent); text-shadow: 0 0 30px var(--accent-glow); }
+.grade-a { color: var(--blue); }
+.grade-b { color: var(--orange); }
+.grade-c { color: var(--red); }
+.btn-primary {
+  padding: 12px 32px; border-radius: 12px; border: none;
+  background: linear-gradient(135deg, var(--accent), #00c49a);
+  color: #000; font-family: 'DM Sans'; font-size: 15px; font-weight: 700;
+  cursor: pointer; transition: all 0.2s;
+}
+.btn-primary:hover { transform: scale(1.03); box-shadow: 0 4px 20px var(--accent-glow); }
+.btn-secondary {
+  padding: 10px 24px; border-radius: 10px;
+  border: 1px solid var(--border); background: transparent;
+  color: var(--text-dim); font-family: 'DM Sans'; font-size: 13px;
+  cursor: pointer; transition: all 0.15s;
+}
+.btn-secondary:hover { color: var(--text); border-color: rgba(255,255,255,0.15); }
+
+#pause-overlay {
+  position: absolute; inset: 0; z-index: 90;
+  display: flex; flex-direction: column;
+  align-items: center; justify-content: center;
+  background: rgba(6,6,14,0.85); backdrop-filter: blur(8px);
+}
+#pause-overlay h2 { font-size: 32px; font-weight: 800; margin-bottom: 20px; }
+
+#countdown-overlay {
+  position: absolute; inset: 0; z-index: 95;
+  display: flex; align-items: center; justify-content: center;
+  background: rgba(6,6,14,0.7); backdrop-filter: blur(4px);
+}
+#countdown-overlay .count-num {
+  font-size: 100px; font-weight: 800; color: var(--accent);
+  text-shadow: 0 0 40px var(--accent-glow);
+  animation: countPulse 0.8s ease-out;
+}
+@keyframes countPulse {
+  0% { transform: scale(1.6); opacity: 0; }
+  40% { opacity: 1; }
+  100% { transform: scale(1); opacity: 1; }
+}
+
+#pitch-debug {
+  position: absolute; top: 54px; right: 8px;
+  font-family: 'JetBrains Mono', monospace; font-size: 11px;
+  color: var(--text-dim); background: var(--bg-surface);
+  padding: 4px 8px; border-radius: 6px; z-index: 20; opacity: 0.7;
+}
+
+@media (max-width: 600px) {
+  .song-grid { grid-template-columns: 1fr; }
+  .results-card { padding: 24px 20px; }
+  .hud-item { font-size: 10px; padding: 2px 6px; }
+}
+</style>
+</head>
+<body>
+<div id="app">
+  <!-- HEADER -->
+  <div id="header" class="hidden">
+    <div class="logo"><em>Piano Flow</em></div>
+    <div class="hud">
+      <div class="hud-item"><span class="label">SCORE</span><span class="val score" id="hud-score">0</span></div>
+      <div class="hud-item"><span class="label">COMBO</span><span class="val combo" id="hud-combo">0</span></div>
+      <div class="hud-item"><span class="label">ACC</span><span class="val accuracy" id="hud-acc">100%</span></div>
+      <button class="btn-icon" id="btn-pause" title="일시정지">⏸</button>
+      <button class="btn-icon" id="btn-back" title="곡 선택으로">✕</button>
+    </div>
+  </div>
+
+  <!-- MENU SCREEN -->
+  <div id="menu-screen">
+    <div class="brand">Piano Flow</div>
+    <div class="subtitle">피아노를 배우는 가장 쉬운 방법</div>
+    <div class="input-mode-section">
+      <button class="input-mode-btn active" data-mode="virtual"><span class="ico">🎹</span> 가상 건반</button>
+      <button class="input-mode-btn" data-mode="mic"><span class="ico">🎤</span> 마이크</button>
+      <button class="input-mode-btn" data-mode="midi"><span class="ico">🔌</span> MIDI</button>
+    </div>
+    <div class="song-grid" id="song-grid"></div>
+    <div class="status-bar" id="status-bar">
+      <div class="status-dot" id="status-dot"></div>
+      <span id="status-text">입력 방식을 선택하세요</span>
+    </div>
+  </div>
+
+  <!-- GAME AREA -->
+  <div id="game-area" class="hidden">
+    <div id="canvas-wrap"><canvas id="note-canvas"></canvas></div>
+    <div id="piano-container"><div id="piano"></div></div>
+    <div id="pitch-debug" class="hidden">PITCH: --</div>
+  </div>
+
+  <!-- PAUSE -->
+  <div id="pause-overlay" class="hidden">
+    <h2>⏸ 일시정지</h2>
+    <div style="display:flex;gap:10px;margin-top:10px;">
+      <button class="btn-primary" id="btn-resume">계속하기</button>
+      <button class="btn-secondary" id="btn-quit">곡 선택으로</button>
+    </div>
+  </div>
+
+  <!-- COUNTDOWN -->
+  <div id="countdown-overlay" class="hidden">
+    <div class="count-num" id="count-num">3</div>
+  </div>
+
+  <!-- RESULTS -->
+  <div id="results-screen" class="hidden">
+    <div class="results-card">
+      <div class="grade" id="res-grade"></div>
+      <h2>연주 완료!</h2>
+      <div class="song-name" id="res-song"></div>
+      <div class="results-stats">
+        <div class="stat"><div class="num" style="color:var(--accent)" id="res-score">0</div><div class="lbl">점수</div></div>
+        <div class="stat"><div class="num" style="color:var(--blue)" id="res-acc">0%</div><div class="lbl">정확도</div></div>
+        <div class="stat"><div class="num" style="color:var(--pink)" id="res-combo">0</div><div class="lbl">최대 콤보</div></div>
+      </div>
+      <div class="results-stats" style="margin-bottom:20px;">
+        <div class="stat"><div class="num" style="color:var(--accent);font-size:20px" id="res-perfect">0</div><div class="lbl">Perfect</div></div>
+        <div class="stat"><div class="num" style="color:var(--orange);font-size:20px" id="res-good">0</div><div class="lbl">Good</div></div>
+        <div class="stat"><div class="num" style="color:var(--red);font-size:20px" id="res-miss">0</div><div class="lbl">Miss</div></div>
+      </div>
+      <div style="display:flex;gap:10px;justify-content:center;">
+        <button class="btn-primary" id="btn-retry">다시 연주</button>
+        <button class="btn-secondary" id="btn-menu">곡 선택</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+/* ═══════════════════════════════════════════════════════════════════
+   Piano Flow — Simply Piano-style Web App MVP
+   ═══════════════════════════════════════════════════════════════════
+   Architecture:
+   1. NoteUtils      — 음계/주파수 유틸리티
+   2. SongLibrary    — 곡 데이터 관리
+   3. AudioEngine    — Web Audio API 피아노 사운드 합성
+   4. PitchDetector  — YIN 알고리즘 기반 마이크 음 인식
+   5. MidiManager    — Web MIDI API 연결/관리
+   6. PianoKeyboard  — 가상 건반 UI
+   7. NoteRenderer   — Canvas 떨어지는 노트 렌더링
+   8. GameEngine     — 판정 로직/점수/게임 루프
+   9. App            — 전체 상태 관리/화면 전환
+   ═══════════════════════════════════════════════════════════════════ */
+
+// ═══════════════════════════════════════════
+// 1. NoteUtils — 음이름 ↔ MIDI번호 ↔ 주파수 변환
+// ═══════════════════════════════════════════
+const NoteUtils = (() => {
+  const NAMES = ['C','C#','D','D#','E','F','F#','G','G#','A','A#','B'];
+
+  /** 음이름(예: "C4") → MIDI 번호. C4 = 60, A4 = 69 */
+  function nameToMidi(name) {
+    const m = name.match(/^([A-G]#?)(\d+)$/);
+    if (!m) return -1;
+    return (parseInt(m[2]) + 1) * 12 + NAMES.indexOf(m[1]);
+  }
+  /** MIDI → 음이름 */
+  function midiToName(midi) {
+    return NAMES[midi % 12] + (Math.floor(midi / 12) - 1);
+  }
+  /** MIDI → 주파수 (A4=440Hz) */
+  function midiToFreq(midi) { return 440 * Math.pow(2, (midi - 69) / 12); }
+  /** 주파수 → 가장 가까운 MIDI */
+  function freqToMidi(freq) { return freq <= 0 ? -1 : Math.round(12 * Math.log2(freq / 440) + 69); }
+  /** 흑건 여부 */
+  function isBlack(name) { return name.replace(/\d+$/, '').includes('#'); }
+  /** 음별 색상 */
+  function noteColor(name) {
+    const pc = name.replace(/[#\d]/g, '');
+    return { C:'#00e8b0', D:'#38bdf8', E:'#8b5cf6', F:'#c084fc', G:'#f472b6', A:'#fb923c', B:'#f43f5e' }[pc] || '#fff';
+  }
+
+  return { NAMES, nameToMidi, midiToName, midiToFreq, freqToMidi, isBlack, noteColor };
+})();
+
+
+// ═══════════════════════════════════════════
+// 2. SongLibrary — 곡 데이터
+// ═══════════════════════════════════════════
+const SongLibrary = (() => {
+  function buildSong(arr, q = 500) {
+    const notes = []; let t = 2000;
+    const D = { w:q*4, h:q*2, q, e:q/2, s:q/4 };
+    for (const item of arr) {
+      if (item.startsWith('r:')) { t += D[item.split(':')[1]] || D.q; continue; }
+      const [note, dur] = item.split(':');
+      const d = D[dur] || D.q;
+      notes.push({ note, time: Math.round(t), duration: Math.round(d) });
+      t += d;
+    }
+    return notes;
+  }
+
+  const songs = [
+    {
+      id: 'twinkle', title: '작은 별 (Twinkle Twinkle)', artist: '동요',
+      difficulty: 'easy', bpm: 100,
+      notes: buildSong([
+        'C4:q','C4:q','G4:q','G4:q','A4:q','A4:q','G4:h',
+        'F4:q','F4:q','E4:q','E4:q','D4:q','D4:q','C4:h',
+        'G4:q','G4:q','F4:q','F4:q','E4:q','E4:q','D4:h',
+        'G4:q','G4:q','F4:q','F4:q','E4:q','E4:q','D4:h',
+        'C4:q','C4:q','G4:q','G4:q','A4:q','A4:q','G4:h',
+        'F4:q','F4:q','E4:q','E4:q','D4:q','D4:q','C4:h',
+      ], 600)
+    },
+    {
+      id: 'schoolbell', title: '학교종 (School Bell)', artist: '동요',
+      difficulty: 'easy', bpm: 110,
+      notes: buildSong([
+        'G4:q','G4:q','A4:q','A4:q','G4:q','G4:q','E4:h',
+        'G4:q','G4:q','E4:q','E4:q','D4:h','r:q',
+        'G4:q','G4:q','A4:q','A4:q','G4:q','G4:q','E4:h',
+        'G4:q','E4:q','D4:q','E4:q','C4:h','r:q',
+      ], 545)
+    },
+    {
+      id: 'butterfly', title: '나비야 (Butterfly)', artist: '동요',
+      difficulty: 'easy', bpm: 100,
+      notes: buildSong([
+        'G4:q','E4:q','E4:h','F4:q','D4:q','D4:h',
+        'C4:q','D4:q','E4:q','F4:q','G4:q','G4:q','G4:h',
+        'G4:q','E4:q','E4:q','E4:q','F4:q','D4:q','D4:h',
+        'C4:q','E4:q','G4:q','G4:q','E4:h','r:h',
+      ], 600)
+    },
+    {
+      id: 'ode_to_joy', title: '환희의 송가 (Ode to Joy)', artist: 'Beethoven',
+      difficulty: 'medium', bpm: 108,
+      notes: buildSong([
+        'E4:q','E4:q','F4:q','G4:q','G4:q','F4:q','E4:q','D4:q',
+        'C4:q','C4:q','D4:q','E4:q','E4:h','D4:h',
+        'E4:q','E4:q','F4:q','G4:q','G4:q','F4:q','E4:q','D4:q',
+        'C4:q','C4:q','D4:q','E4:q','D4:h','C4:h',
+      ], 555)
+    },
+    {
+      id: 'canon', title: '캐논 변주곡 (Canon)', artist: 'Pachelbel',
+      difficulty: 'medium', bpm: 72,
+      notes: buildSong([
+        'E5:q','C5:q','D5:q','G4:q',
+        'A4:q','E5:q','A4:q','B4:q',
+        'C5:q','G4:q','C5:q','E5:q',
+        'A4:q','E5:q','A4:q','B4:q',
+        'C5:h','E5:q','D5:q',
+        'C5:q','B4:q','A4:q','G4:q',
+        'A4:q','C5:q','B4:q','D5:q',
+        'C5:h','r:h',
+      ], 830)
+    },
+    {
+      id: 'fur_elise', title: '엘리제를 위하여', artist: 'Beethoven',
+      difficulty: 'hard', bpm: 130,
+      notes: buildSong([
+        'E5:e','D#5:e','E5:e','D#5:e','E5:e','B4:e','D5:e','C5:e',
+        'A4:q','r:e','C4:e','E4:e','A4:e',
+        'B4:q','r:e','E4:e','G#4:e','B4:e',
+        'C5:q','r:e','E4:e','E5:e','D#5:e',
+        'E5:e','D#5:e','E5:e','B4:e','D5:e','C5:e',
+        'A4:q','r:e','C4:e','E4:e','A4:e',
+        'B4:q','r:e','E4:e','C5:e','B4:e',
+        'A4:h','r:h',
+      ], 460)
+    },
+  ];
+
+  return { getAll: () => songs, getById: id => songs.find(s => s.id === id) };
+})();
+
+
+// ═══════════════════════════════════════════
+// 3. AudioEngine — FM 합성 피아노 사운드
+// ═══════════════════════════════════════════
+class AudioEngine {
+  constructor() { this.ctx = null; this.masterGain = null; }
+
+  init() {
+    if (this.ctx) return;
+    this.ctx = new (window.AudioContext || window.webkitAudioContext)();
+    this.masterGain = this.ctx.createGain();
+    this.masterGain.gain.value = 0.4;
+    this.masterGain.connect(this.ctx.destination);
+  }
+
+  resume() {
+    if (this.ctx?.state === 'suspended') this.ctx.resume();
+  }
+
+  /**
+   * 피아노 소리 합성 (FM Synthesis)
+   * - Carrier(삼각파) + 2nd/3rd 배음(사인파)으로 피아노 톤 근사
+   * - ADSR 엔벨로프: Attack 8ms → Decay → Sustain → Release
+   */
+  playNote(midiNote, velocity = 0.6, duration = 0.4) {
+    if (!this.ctx) this.init();
+    this.resume();
+    const freq = NoteUtils.midiToFreq(midiNote);
+    const now = this.ctx.currentTime;
+
+    // Carrier + Harmonics
+    const oscs = [
+      { type: 'triangle', f: freq,     g: velocity * 0.5 },
+      { type: 'sine',     f: freq * 2, g: velocity * 0.15 },
+      { type: 'sine',     f: freq * 3, g: velocity * 0.05 },
+    ];
+
+    // ADSR 엔벨로프 (피아노 특성: 빠른 어택, 지수적 감쇠)
+    const env = this.ctx.createGain();
+    env.gain.setValueAtTime(0, now);
+    env.gain.linearRampToValueAtTime(1, now + 0.008);       // Attack
+    env.gain.exponentialRampToValueAtTime(0.4, now + 0.1);   // Decay
+    env.gain.exponentialRampToValueAtTime(0.15, now + duration * 0.6); // Sustain
+    env.gain.exponentialRampToValueAtTime(0.001, now + duration + 0.3); // Release
+    env.connect(this.masterGain);
+
+    for (const o of oscs) {
+      const osc = this.ctx.createOscillator();
+      const g = this.ctx.createGain();
+      osc.type = o.type; osc.frequency.value = o.f; g.gain.value = o.g;
+      osc.connect(g); g.connect(env);
+      osc.start(now); osc.stop(now + duration + 0.5);
+    }
+  }
+
+  playFx(type) {
+    if (!this.ctx) return;
+    const now = this.ctx.currentTime;
+    const osc = this.ctx.createOscillator();
+    const g = this.ctx.createGain();
+    if (type === 'perfect') {
+      osc.frequency.value = 880; osc.type = 'sine';
+      g.gain.setValueAtTime(0.06, now);
+      g.gain.exponentialRampToValueAtTime(0.001, now + 0.12);
+      osc.stop(now + 0.12);
+    } else {
+      osc.frequency.value = 200; osc.type = 'square';
+      g.gain.setValueAtTime(0.03, now);
+      g.gain.exponentialRampToValueAtTime(0.001, now + 0.08);
+      osc.stop(now + 0.08);
+    }
+    osc.connect(g); g.connect(this.masterGain); osc.start(now);
+  }
+}
+
+
+// ═══════════════════════════════════════════
+// 4. PitchDetector — YIN 알고리즘 실시간 피치 감지
+// ═══════════════════════════════════════════
+/**
+ * YIN 알고리즘 (de Cheveigné & Kawahara, 2002)
+ *
+ * 음의 기본 주파수(F0)를 추정하는 시간 도메인 알고리즘.
+ * Autocorrelation 기반이지만 CMNDF(누적 평균 정규화 차분 함수)를
+ * 사용하여 옥타브 에러를 크게 줄임.
+ *
+ * 단계:
+ *  1) 차분 함수: d(τ) = Σ(x[j] - x[j+τ])²
+ *  2) CMNDF: d'(τ) = d(τ) * τ / Σd(j) for j=1..τ
+ *  3) 임계값 탐색: d'(τ) < threshold 인 첫 valley
+ *  4) 포물선 보간: 정수 τ 주변 3점 피팅 → 소수점 정밀도
+ *  5) F0 = sampleRate / τ_refined
+ */
+class PitchDetector {
+  constructor() {
+    this.audioCtx = null; this.analyser = null;
+    this.mediaStream = null; this.buffer = null;
+    this.isActive = false; this.lastDetectedMidi = -1;
+    this.onNoteDetected = null;
+    this.threshold = 0.12;
+    this._rafId = null;
+    this._lastNoteMidi = -1;
+    this._stableCount = 0;
+  }
+
+  async start() {
+    try {
+      this.mediaStream = await navigator.mediaDevices.getUserMedia({
+        audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: false }
+      });
+      this.audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+      const src = this.audioCtx.createMediaStreamSource(this.mediaStream);
+      this.analyser = this.audioCtx.createAnalyser();
+      this.analyser.fftSize = 2048; // 주파수 해상도 확보
+      src.connect(this.analyser);
+      this.buffer = new Float32Array(this.analyser.fftSize);
+      this.isActive = true;
+      this._detect();
+      return true;
+    } catch (e) { console.warn('마이크 접근 실패:', e); return false; }
+  }
+
+  stop() {
+    this.isActive = false;
+    if (this._rafId) cancelAnimationFrame(this._rafId);
+    this.mediaStream?.getTracks().forEach(t => t.stop());
+    this.audioCtx?.close();
+    this.audioCtx = null;
+  }
+
+  _detect() {
+    if (!this.isActive) return;
+    this.analyser.getFloatTimeDomainData(this.buffer);
+
+    // RMS 볼륨 체크
+    let rms = 0;
+    for (let i = 0; i < this.buffer.length; i++) rms += this.buffer[i] ** 2;
+    rms = Math.sqrt(rms / this.buffer.length);
+
+    if (rms > 0.01) {
+      const pitch = this._yinDetect(this.buffer, this.audioCtx.sampleRate);
+      if (pitch > 0) {
+        const midi = NoteUtils.freqToMidi(pitch);
+        if (midi >= 21 && midi <= 108) {
+          // 안정성: 같은 음이 2프레임 연속이면 콜백
+          if (midi === this._lastNoteMidi) {
+            this._stableCount++;
+          } else {
+            this._lastNoteMidi = midi;
+            this._stableCount = 1;
+          }
+          if (this._stableCount >= 2) {
+            this.lastDetectedMidi = midi;
+            if (this.onNoteDetected) this.onNoteDetected(midi);
+          }
+        }
+      }
+    } else {
+      this.lastDetectedMidi = -1;
+      this._lastNoteMidi = -1;
+      this._stableCount = 0;
+    }
+    this._rafId = requestAnimationFrame(() => this._detect());
+  }
+
+  /**
+   * YIN 피치 감지 구현
+   * @param {Float32Array} buf - 시간 도메인 오디오 버퍼
+   * @param {number} sr - 샘플레이트
+   * @returns {number} 추정 주파수(Hz), 실패시 -1
+   */
+  _yinDetect(buf, sr) {
+    const half = buf.length >> 1;
+    const d = new Float32Array(half); // 차분 함수 버퍼
+
+    // ── Step 1: 차분 함수 ──
+    // d(τ) = Σ_{j=0}^{W-1} (x[j] - x[j+τ])²
+    for (let tau = 0; tau < half; tau++) {
+      let sum = 0;
+      for (let j = 0; j < half; j++) {
+        const diff = buf[j] - buf[j + tau];
+        sum += diff * diff;
+      }
+      d[tau] = sum;
+    }
+
+    // ── Step 2: CMNDF (Cumulative Mean Normalized Difference) ──
+    // d'(0) = 1, d'(τ) = d(τ) / ((1/τ) * Σd(j)) for j=1..τ
+    // 핵심: 순수 autocorrelation 대비 옥타브 에러 크게 감소
+    d[0] = 1;
+    let running = 0;
+    for (let tau = 1; tau < half; tau++) {
+      running += d[tau];
+      d[tau] = d[tau] * tau / running;
+    }
+
+    // ── Step 3: 절대 임계값으로 첫 번째 valley 탐색 ──
+    const tauMin = Math.floor(sr / 4200); // 최고 ~4186Hz (C8)
+    const tauMax = Math.min(half, Math.floor(sr / 50)); // 최저 50Hz
+    let bestTau = -1;
+
+    for (let tau = tauMin; tau < tauMax; tau++) {
+      if (d[tau] < this.threshold) {
+        // valley의 바닥까지 더 진행
+        while (tau + 1 < tauMax && d[tau + 1] < d[tau]) tau++;
+        bestTau = tau;
+        break;
+      }
+    }
+    if (bestTau === -1) return -1;
+
+    // ── Step 4: 포물선 보간 (Parabolic Interpolation) ──
+    // 정수 τ 주변 3점 (τ-1, τ, τ+1)으로 포물선 피팅
+    // 꼭짓점: τ_refined = τ + (x0 - x2) / (2(x0 - 2x1 + x2))
+    const x0 = bestTau > 0 ? d[bestTau - 1] : d[bestTau];
+    const x1 = d[bestTau];
+    const x2 = bestTau + 1 < half ? d[bestTau + 1] : d[bestTau];
+    const denom = 2 * (x0 - 2 * x1 + x2);
+    const refined = denom !== 0 ? bestTau + (x0 - x2) / denom : bestTau;
+
+    // ── Step 5: 주파수 = sampleRate / period ──
+    return sr / refined;
+  }
+}
+
+
+// ═══════════════════════════════════════════
+// 5. MidiManager — Web MIDI API
+// ═══════════════════════════════════════════
+/**
+ * MIDI 메시지 구조:
+ *  data[0] = Status byte (0x90=NoteOn, 0x80=NoteOff)
+ *  data[1] = Note number (0~127, 60=C4)
+ *  data[2] = Velocity (0~127)
+ */
+class MidiManager {
+  constructor() {
+    this.midiAccess = null; this.inputs = [];
+    this.isConnected = false;
+    this.onNoteOn = null; this.onNoteOff = null;
+    this.deviceName = '';
+  }
+
+  async init() {
+    if (!navigator.requestMIDIAccess) { console.warn('Web MIDI 미지원'); return false; }
+    try {
+      this.midiAccess = await navigator.requestMIDIAccess({ sysex: false });
+      this._connect();
+      this.midiAccess.onstatechange = () => this._connect();
+      return this.isConnected;
+    } catch (e) { console.warn('MIDI 실패:', e); return false; }
+  }
+
+  _connect() {
+    this.inputs = [];
+    for (const inp of this.midiAccess.inputs.values()) {
+      this.inputs.push(inp);
+      inp.onmidimessage = (msg) => this._handle(msg);
+    }
+    this.isConnected = this.inputs.length > 0;
+    this.deviceName = this.isConnected ? this.inputs[0].name : '';
+  }
+
+  _handle(msg) {
+    const [status, note, vel] = msg.data;
+    const cmd = status & 0xf0;
+    if (cmd === 0x90 && vel > 0) { if (this.onNoteOn) this.onNoteOn(note, vel / 127); }
+    else if (cmd === 0x80 || (cmd === 0x90 && vel === 0)) { if (this.onNoteOff) this.onNoteOff(note); }
+  }
+
+  disconnect() { this.inputs.forEach(i => i.onmidimessage = null); }
+}
+
+
+// ═══════════════════════════════════════════
+// 6. PianoKeyboard — 가상 건반 UI
+// ═══════════════════════════════════════════
+class PianoKeyboard {
+  constructor(container, startNote, endNote, onDown, onUp) {
+    this.container = container;
+    this.startMidi = NoteUtils.nameToMidi(startNote);
+    this.endMidi = NoteUtils.nameToMidi(endNote);
+    this.onDown = onDown; this.onUp = onUp;
+    this.keyEls = {};
+    this.activeKeys = new Set();
+    this._build();
+    this._bind();
+  }
+
+  _build() {
+    this.container.innerHTML = '';
+    const whites = [], blacks = [];
+    for (let m = this.startMidi; m <= this.endMidi; m++) {
+      (NoteUtils.isBlack(NoteUtils.midiToName(m)) ? blacks : whites).push(m);
+    }
+    const total = whites.length;
+
+    whites.forEach((midi) => {
+      const k = document.createElement('div');
+      k.className = 'key white'; k.dataset.midi = midi;
+      k.innerHTML = `<span class="key-label">${NoteUtils.midiToName(midi)}</span>`;
+      k.style.width = `${100 / total}%`;
+      this.container.appendChild(k);
+      this.keyEls[midi] = k;
+    });
+
+    blacks.forEach(midi => {
+      const prev = midi - 1;
+      const idx = whites.indexOf(prev);
+      if (idx === -1) return;
+      const k = document.createElement('div');
+      k.className = 'key black'; k.dataset.midi = midi;
+      k.innerHTML = `<span class="key-label">${NoteUtils.midiToName(midi)}</span>`;
+      const ww = 100 / total, bw = ww * 0.65;
+      k.style.width = `${bw}%`;
+      k.style.left = `${(idx + 1) * ww - bw / 2}%`;
+      this.container.appendChild(k);
+      this.keyEls[midi] = k;
+    });
+  }
+
+  _bind() {
+    const getKey = (x, y) => {
+      const els = document.elementsFromPoint(x, y);
+      return els.find(e => e.classList.contains('black')) ||
+             els.find(e => e.classList.contains('white')) || null;
+    };
+
+    this.container.addEventListener('touchstart', e => {
+      e.preventDefault();
+      for (const t of e.changedTouches) {
+        const k = getKey(t.clientX, t.clientY);
+        if (k) this._press(+k.dataset.midi);
+      }
+    }, { passive: false });
+
+    this.container.addEventListener('touchend', e => {
+      e.preventDefault();
+      for (const t of e.changedTouches) {
+        const k = getKey(t.clientX, t.clientY);
+        if (k) this._release(+k.dataset.midi);
+      }
+      if (e.touches.length === 0) this.activeKeys.forEach(m => this._release(m));
+    }, { passive: false });
+
+    this.container.addEventListener('touchmove', e => e.preventDefault(), { passive: false });
+
+    this.container.addEventListener('mousedown', e => {
+      const k = e.target.closest('.key');
+      if (k) this._press(+k.dataset.midi);
+    });
+    this.container.addEventListener('mouseup', () => this.activeKeys.forEach(m => this._release(m)));
+    this.container.addEventListener('mouseleave', () => this.activeKeys.forEach(m => this._release(m)));
+  }
+
+  _press(midi) {
+    if (this.activeKeys.has(midi)) return;
+    this.activeKeys.add(midi);
+    this.keyEls[midi]?.classList.add('active');
+    if (this.onDown) this.onDown(midi);
+  }
+
+  _release(midi) {
+    if (!this.activeKeys.has(midi)) return;
+    this.activeKeys.delete(midi);
+    this.keyEls[midi]?.classList.remove('active');
+    if (this.onUp) this.onUp(midi);
+  }
+
+  highlightKey(midi, cls = 'active') { this.keyEls[midi]?.classList.add(cls); }
+  unhighlightKey(midi, cls = 'active') { this.keyEls[midi]?.classList.remove(cls); }
+  clearAll() {
+    Object.values(this.keyEls).forEach(el => el.classList.remove('active','target-hit','target-miss'));
+    this.activeKeys.clear();
+  }
+}
+
+
+// ═══════════════════════════════════════════
+// 7. NoteRenderer — Canvas 떨어지는 노트
+// ═══════════════════════════════════════════
+class NoteRenderer {
+  constructor(canvas, startMidi, endMidi) {
+    this.canvas = canvas;
+    this.ctx = canvas.getContext('2d');
+    this.startMidi = startMidi;
+    this.endMidi = endMidi;
+
+    this.whites = []; this.blacks = [];
+    for (let m = startMidi; m <= endMidi; m++) {
+      (NoteUtils.isBlack(NoteUtils.midiToName(m)) ? this.blacks : this.whites).push(m);
+    }
+    this.totalW = this.whites.length;
+    this.scrollSpeed = 0.25; // px per ms
+    this.W = 0; this.H = 0;
+    this._resize();
+    this._resizeHandler = () => this._resize();
+    window.addEventListener('resize', this._resizeHandler);
+  }
+
+  destroy() { window.removeEventListener('resize', this._resizeHandler); }
+
+  _resize() {
+    const r = this.canvas.parentElement.getBoundingClientRect();
+    const dpr = window.devicePixelRatio || 1;
+    this.canvas.width = r.width * dpr;
+    this.canvas.height = r.height * dpr;
+    this.canvas.style.width = r.width + 'px';
+    this.canvas.style.height = r.height + 'px';
+    this.ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    this.W = r.width; this.H = r.height;
+  }
+
+  /** MIDI 번호 → (x, width) */
+  getNoteXW(midi) {
+    const name = NoteUtils.midiToName(midi);
+    const ww = this.W / this.totalW;
+    if (!NoteUtils.isBlack(name)) {
+      const i = this.whites.indexOf(midi);
+      return { x: i * ww, w: ww };
+    } else {
+      const i = this.whites.indexOf(midi - 1);
+      if (i === -1) return { x: 0, w: 0 };
+      const bw = ww * 0.65;
+      return { x: (i + 1) * ww - bw / 2, w: bw };
+    }
+  }
+
+  render(notes, currentTime, particles = []) {
+    const ctx = this.ctx;
+    ctx.clearRect(0, 0, this.W, this.H);
+
+    // 배경 그리드
+    ctx.strokeStyle = 'rgba(255,255,255,0.025)';
+    ctx.lineWidth = 1;
+    const ww = this.W / this.totalW;
+    for (let i = 1; i < this.totalW; i++) {
+      ctx.beginPath(); ctx.moveTo(i * ww, 0); ctx.lineTo(i * ww, this.H); ctx.stroke();
+    }
+
+    // 노트 렌더링
+    for (const note of notes) {
+      const midi = NoteUtils.nameToMidi(note.note);
+      const { x, w } = this.getNoteXW(midi);
+      if (w === 0) continue;
+
+      const tDiff = note.time - currentTime;
+      const topY = this.H - tDiff * this.scrollSpeed;
+      const nh = Math.max(note.duration * this.scrollSpeed, 12);
+      const botY = topY + nh;
+
+      if (botY < -20 || topY > this.H + 20) continue;
+
+      let color = NoteUtils.noteColor(note.note), alpha = 1;
+      if (note.state === 'hit') { color = '#00e8b0'; alpha = 0.9; }
+      else if (note.state === 'good') { color = '#facc15'; alpha = 0.9; }
+      else if (note.state === 'miss') { color = '#f43f5e'; alpha = 0.4; }
+
+      const isB = NoteUtils.isBlack(note.note);
+      const pad = isB ? 1 : 2, rad = 5;
+      const nx = x + pad, nw = w - pad * 2;
+
+      if (note.state !== 'miss') { ctx.shadowColor = color; ctx.shadowBlur = 12; }
+      ctx.globalAlpha = alpha;
+      ctx.fillStyle = color;
+
+      // 둥근 사각형
+      ctx.beginPath();
+      ctx.moveTo(nx + rad, topY);
+      ctx.lineTo(nx + nw - rad, topY);
+      ctx.quadraticCurveTo(nx + nw, topY, nx + nw, topY + rad);
+      ctx.lineTo(nx + nw, topY + nh - rad);
+      ctx.quadraticCurveTo(nx + nw, topY + nh, nx + nw - rad, topY + nh);
+      ctx.lineTo(nx + rad, topY + nh);
+      ctx.quadraticCurveTo(nx, topY + nh, nx, topY + nh - rad);
+      ctx.lineTo(nx, topY + rad);
+      ctx.quadraticCurveTo(nx, topY, nx + rad, topY);
+      ctx.closePath();
+      ctx.fill();
+      ctx.shadowBlur = 0;
+      ctx.globalAlpha = 1;
+
+      // 음이름
+      if (nh > 20 && nw > 20) {
+        ctx.fillStyle = note.state === 'miss' ? 'rgba(255,255,255,0.3)' : 'rgba(0,0,0,0.5)';
+        ctx.font = '600 11px "DM Sans"';
+        ctx.textAlign = 'center';
+        ctx.fillText(note.note, nx + nw / 2, topY + nh / 2 + 4);
+      }
+    }
+
+    // 파티클
+    for (const p of particles) {
+      ctx.globalAlpha = p.alpha;
+      ctx.fillStyle = p.color;
+      ctx.beginPath(); ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2); ctx.fill();
+    }
+    ctx.globalAlpha = 1;
+
+    // 판정선 그라데이션
+    const grad = ctx.createLinearGradient(0, this.H - 30, 0, this.H);
+    grad.addColorStop(0, 'rgba(0,232,176,0)');
+    grad.addColorStop(1, 'rgba(0,232,176,0.08)');
+    ctx.fillStyle = grad;
+    ctx.fillRect(0, this.H - 30, this.W, 30);
+  }
+}
+
+
+// ═══════════════════════════════════════════
+// 8. GameEngine — 판정/점수/게임루프
+// ═══════════════════════════════════════════
+class GameEngine {
+  constructor() { this.reset(); }
+
+  reset() {
+    this.song = null; this.notes = [];
+    this.startTime = 0; this.currentTime = 0;
+    this.isPlaying = false; this.isPaused = false;
+    this.pauseStart = 0; this.totalPause = 0;
+    this.PERFECT = 120; this.GOOD = 250; this.MISS_T = 350;
+    this.score = 0; this.combo = 0; this.maxCombo = 0;
+    this.perfects = 0; this.goods = 0; this.misses = 0;
+    this.totalNotes = 0; this.particles = [];
+    this.onScoreUpdate = null; this.onJudgment = null; this.onSongEnd = null;
+  }
+
+  loadSong(song) {
+    this.song = song;
+    this.notes = song.notes.map(n => ({
+      ...n, midi: NoteUtils.nameToMidi(n.note), state: 'pending', judged: false
+    }));
+    this.totalNotes = this.notes.length;
+    this.score = 0; this.combo = 0; this.maxCombo = 0;
+    this.perfects = 0; this.goods = 0; this.misses = 0;
+    this.particles = []; this.totalPause = 0;
+  }
+
+  start() { this.startTime = performance.now(); this.isPlaying = true; this.isPaused = false; }
+  pause() { if (!this.isPlaying || this.isPaused) return; this.isPaused = true; this.pauseStart = performance.now(); }
+  resume() { if (!this.isPaused) return; this.totalPause += performance.now() - this.pauseStart; this.isPaused = false; }
+  stop() { this.isPlaying = false; }
+
+  update(ts) {
+    if (!this.isPlaying || this.isPaused) return;
+    this.currentTime = ts - this.startTime - this.totalPause;
+
+    // 자동 miss
+    for (const n of this.notes) {
+      if (n.judged) continue;
+      if (this.currentTime - n.time > this.MISS_T) {
+        n.state = 'miss'; n.judged = true; this.misses++; this.combo = 0;
+        this.onJudgment?.('miss', n);
+        this.onScoreUpdate?.();
+      }
+    }
+
+    // 파티클 업데이트
+    for (let i = this.particles.length - 1; i >= 0; i--) {
+      const p = this.particles[i];
+      p.x += p.vx; p.y += p.vy; p.vy += 0.1;
+      p.alpha -= 0.02; p.size *= 0.97;
+      if (p.alpha <= 0) this.particles.splice(i, 1);
+    }
+
+    // 종료 체크
+    const last = this.notes[this.notes.length - 1]?.time || 0;
+    if (this.notes.every(n => n.judged) || this.currentTime > last + 2000) {
+      this.isPlaying = false;
+      this.onSongEnd?.();
+    }
+  }
+
+  /** 입력 판정 */
+  judgeInput(midiNote) {
+    if (!this.isPlaying || this.isPaused) return null;
+
+    let best = null, bestDiff = Infinity;
+    for (const n of this.notes) {
+      if (n.judged || n.midi !== midiNote) continue;
+      const d = Math.abs(this.currentTime - n.time);
+      if (d < bestDiff && d < this.GOOD) { bestDiff = d; best = n; }
+    }
+    if (!best) return null;
+
+    let type;
+    if (bestDiff <= this.PERFECT) {
+      type = 'perfect'; best.state = 'hit'; this.perfects++;
+      this.score += 100 * (1 + this.combo * 0.1); this.combo++;
+    } else {
+      type = 'good'; best.state = 'good'; this.goods++;
+      this.score += 50 * (1 + this.combo * 0.05); this.combo++;
+    }
+    best.judged = true;
+    this.maxCombo = Math.max(this.maxCombo, this.combo);
+    this.score = Math.round(this.score);
+
+    // 파티클
+    const col = type === 'perfect' ? '#00e8b0' : '#facc15';
+    for (let i = 0; i < 8; i++) {
+      this.particles.push({
+        x: 0, y: 0, vx: (Math.random()-0.5)*6, vy: -Math.random()*4-2,
+        size: Math.random()*4+2, alpha: 1, color: col, noteMidi: best.midi, _posSet: false
+      });
+    }
+
+    this.onJudgment?.(type, best);
+    this.onScoreUpdate?.();
+    return { judgment: type, note: best };
+  }
+
+  getAccuracy() {
+    const j = this.perfects + this.goods + this.misses;
+    return j === 0 ? 100 : Math.round(((this.perfects*100+this.goods*50)/(j*100))*100);
+  }
+
+  getGrade() {
+    const a = this.getAccuracy();
+    return a >= 95 ? 'S' : a >= 80 ? 'A' : a >= 60 ? 'B' : 'C';
+  }
+}
+
+
+// ═══════════════════════════════════════════
+// 9. App — 전체 앱 오케스트레이션
+// ═══════════════════════════════════════════
+class App {
+  constructor() {
+    this.audio = new AudioEngine();
+    this.pitch = new PitchDetector();
+    this.midi = new MidiManager();
+    this.kb = null; this.renderer = null;
+    this.game = new GameEngine();
+    this.inputMode = 'virtual';
+    this.currentSong = null;
+    this._raf = null;
+    this._micDebounce = {};
+
+    this.el = {
+      menu: document.getElementById('menu-screen'),
+      game: document.getElementById('game-area'),
+      header: document.getElementById('header'),
+      canvas: document.getElementById('note-canvas'),
+      piano: document.getElementById('piano'),
+      songGrid: document.getElementById('song-grid'),
+      sDot: document.getElementById('status-dot'),
+      sText: document.getElementById('status-text'),
+      hScore: document.getElementById('hud-score'),
+      hCombo: document.getElementById('hud-combo'),
+      hAcc: document.getElementById('hud-acc'),
+      pause: document.getElementById('pause-overlay'),
+      countdown: document.getElementById('countdown-overlay'),
+      countNum: document.getElementById('count-num'),
+      results: document.getElementById('results-screen'),
+      pitchDbg: document.getElementById('pitch-debug'),
+    };
+
+    this._buildSongs();
+    this._bindMenu();
+    this._bindGame();
+  }
+
+  // ── Menu ──
+  _buildSongs() {
+    const g = this.el.songGrid;
+    g.innerHTML = '';
+
+    // Free Play
+    const fp = document.createElement('div');
+    fp.className = 'song-card free-play';
+    fp.innerHTML = `<div class="s-title">🎹 자유 연주</div><div class="s-meta">곡 없이 자유롭게 연주</div>`;
+    fp.onclick = () => this._freePlay();
+    g.appendChild(fp);
+
+    for (const s of SongLibrary.getAll()) {
+      const c = document.createElement('div');
+      c.className = 'song-card';
+      const dc = s.difficulty === 'easy' ? 'diff-easy' : s.difficulty === 'medium' ? 'diff-mid' : 'diff-hard';
+      const dl = s.difficulty === 'easy' ? '쉬움' : s.difficulty === 'medium' ? '보통' : '어려움';
+      c.innerHTML = `<div class="s-title">${s.title}</div>
+        <div class="s-meta">${s.artist} · ${s.notes.length}노트 · BPM ${s.bpm||'?'}</div>
+        <span class="s-diff ${dc}">${dl}</span>`;
+      c.onclick = () => this._startSong(s.id);
+      g.appendChild(c);
+    }
+  }
+
+  _bindMenu() {
+    document.querySelectorAll('.input-mode-btn').forEach(b => {
+      b.onclick = async () => {
+        document.querySelectorAll('.input-mode-btn').forEach(x => x.classList.remove('active'));
+        b.classList.add('active');
+        this.inputMode = b.dataset.mode;
+        await this._setupInput();
+      };
+    });
+  }
+
+  async _setupInput() {
+    const { sDot: d, sText: t } = this.el;
+    this.pitch.stop(); this.midi.disconnect();
+
+    if (this.inputMode === 'virtual') {
+      d.className = 'status-dot connected';
+      t.textContent = '가상 건반 모드 — 화면 터치로 연주합니다';
+    } else if (this.inputMode === 'mic') {
+      d.className = 'status-dot'; t.textContent = '마이크 연결 중...';
+      const ok = await this.pitch.start();
+      d.className = 'status-dot' + (ok ? ' connected' : '');
+      t.textContent = ok ? '🎤 마이크 연결됨 — 피아노 소리를 들려주세요' : '⚠️ 마이크 접근 실패';
+    } else {
+      d.className = 'status-dot'; t.textContent = 'MIDI 기기 연결 중...';
+      const ok = await this.midi.init();
+      d.className = 'status-dot' + (ok ? ' connected' : '');
+      t.textContent = ok ? `🔌 MIDI 연결됨 — ${this.midi.deviceName}` : '⚠️ MIDI 기기를 찾을 수 없습니다';
+    }
+  }
+
+  // ── Game Start ──
+  async _startSong(id) {
+    this.audio.init();
+    const song = SongLibrary.getById(id);
+    if (!song) return;
+    this.currentSong = song;
+
+    let lo = 127, hi = 0;
+    for (const n of song.notes) {
+      const m = NoteUtils.nameToMidi(n.note);
+      if (m < lo) lo = m; if (m > hi) hi = m;
+    }
+    lo = Math.max(21, lo - 2); hi = Math.min(108, hi + 2);
+    while (NoteUtils.isBlack(NoteUtils.midiToName(lo)) && lo > 21) lo--;
+    while (NoteUtils.isBlack(NoteUtils.midiToName(hi)) && hi < 108) hi++;
+
+    this._showGame(lo, hi);
+    this.game.loadSong(song);
+    this._hookGame();
+    await this._hookInput();
+    this._countdown(() => { this.game.start(); this._loop(); });
+  }
+
+  _freePlay() {
+    this.audio.init();
+    this.currentSong = null;
+    this._showGame(NoteUtils.nameToMidi('C3'), NoteUtils.nameToMidi('B5'));
+    this._hookInput();
+  }
+
+  _showGame(lo, hi) {
+    this.el.menu.classList.add('hidden');
+    this.el.game.classList.remove('hidden');
+    this.el.header.classList.remove('hidden');
+    this.el.results.classList.add('hidden');
+
+    this.kb = new PianoKeyboard(this.el.piano,
+      NoteUtils.midiToName(lo), NoteUtils.midiToName(hi),
+      m => this._onKey(m), m => this._onKeyUp(m));
+
+    if (this.renderer) this.renderer.destroy();
+    this.renderer = new NoteRenderer(this.el.canvas, lo, hi);
+
+    this.el.hScore.textContent = '0';
+    this.el.hCombo.textContent = '0';
+    this.el.hAcc.textContent = '100%';
+  }
+
+  _hookGame() {
+    this.game.onScoreUpdate = () => {
+      this.el.hScore.textContent = this.game.score.toLocaleString();
+      this.el.hCombo.textContent = this.game.combo;
+      this.el.hAcc.textContent = this.game.getAccuracy() + '%';
+    };
+    this.game.onJudgment = (type, note) => {
+      this._popup(type);
+      if (type !== 'miss') {
+        this.kb.highlightKey(note.midi, 'target-hit');
+        setTimeout(() => this.kb.unhighlightKey(note.midi, 'target-hit'), 200);
+      }
+    };
+    this.game.onSongEnd = () => setTimeout(() => this._showResults(), 800);
+  }
+
+  async _hookInput() {
+    if (this.inputMode === 'mic') {
+      if (!this.pitch.isActive) await this.pitch.start();
+      this.pitch.onNoteDetected = (midi) => {
+        this.el.pitchDbg.classList.remove('hidden');
+        this.el.pitchDbg.textContent = `PITCH: ${NoteUtils.midiToName(midi)} (${Math.round(NoteUtils.midiToFreq(midi))}Hz)`;
+        this.kb.highlightKey(midi);
+        setTimeout(() => this.kb.unhighlightKey(midi), 150);
+
+        // 마이크 디바운스: 같은 음 200ms 이내 재감지 방지
+        const now = performance.now();
+        if (this._micDebounce[midi] && now - this._micDebounce[midi] < 200) return;
+        this._micDebounce[midi] = now;
+        this._onKey(midi);
+      };
+    }
+    if (this.inputMode === 'midi') {
+      if (!this.midi.isConnected) await this.midi.init();
+      this.midi.onNoteOn = (midi, vel) => {
+        this.audio.playNote(midi, vel, 0.5);
+        this.kb.highlightKey(midi);
+        this._onKey(midi);
+      };
+      this.midi.onNoteOff = (midi) => this.kb.unhighlightKey(midi);
+    }
+  }
+
+  _onKey(midi) {
+    if (this.inputMode === 'virtual') this.audio.playNote(midi, 0.6, 0.5);
+    if (this.game.isPlaying && !this.game.isPaused) {
+      const r = this.game.judgeInput(midi);
+      if (r && r.judgment !== 'miss') this.audio.playFx('perfect');
+    }
+  }
+  _onKeyUp(midi) {}
+
+  // ── Countdown ──
+  _countdown(cb) {
+    this.el.countdown.classList.remove('hidden');
+    let c = 3;
+    this.el.countNum.textContent = c;
+    const tick = () => {
+      c--;
+      if (c > 0) {
+        this.el.countNum.textContent = c;
+        this.el.countNum.style.animation = 'none';
+        void this.el.countNum.offsetHeight;
+        this.el.countNum.style.animation = 'countPulse 0.8s ease-out';
+        setTimeout(tick, 800);
+      } else {
+        this.el.countNum.textContent = '♪';
+        setTimeout(() => { this.el.countdown.classList.add('hidden'); cb(); }, 400);
+      }
+    };
+    setTimeout(tick, 800);
+  }
+
+  // ── Game Loop ──
+  _loop() {
+    if (!this.game.isPlaying && !this.game.isPaused) return;
+    this.game.update(performance.now());
+
+    if (this.renderer) {
+      for (const p of this.game.particles) {
+        if (p.noteMidi && !p._posSet) {
+          const { x, w } = this.renderer.getNoteXW(p.noteMidi);
+          p.x = x + w / 2 + p.vx * 3;
+          p.y = this.renderer.H - 10;
+          p._posSet = true;
+        }
+      }
+      this.renderer.render(this.game.notes, this.game.currentTime, this.game.particles);
+    }
+    this._raf = requestAnimationFrame(() => this._loop());
+  }
+
+  _popup(type) {
+    const wrap = document.getElementById('canvas-wrap');
+    const p = document.createElement('div');
+    p.className = 'judge-popup';
+    if (type === 'perfect') { p.textContent = 'Perfect!'; p.style.color = '#00e8b0'; }
+    else if (type === 'good') { p.textContent = 'Good'; p.style.color = '#facc15'; }
+    else { p.textContent = 'Miss'; p.style.color = '#f43f5e'; }
+    p.style.bottom = '20px';
+    wrap.appendChild(p);
+    setTimeout(() => p.remove(), 600);
+  }
+
+  // ── Controls ──
+  _bindGame() {
+    document.getElementById('btn-pause').onclick = () => {
+      if (this.game.isPlaying && !this.game.isPaused) {
+        this.game.pause(); this.el.pause.classList.remove('hidden');
+      }
+    };
+    document.getElementById('btn-resume').onclick = () => {
+      this.game.resume(); this.el.pause.classList.add('hidden'); this._loop();
+    };
+    document.getElementById('btn-quit').onclick = () => this._toMenu();
+    document.getElementById('btn-back').onclick = () => this._toMenu();
+    document.getElementById('btn-retry').onclick = () => {
+      if (this.currentSong) {
+        this.el.results.classList.add('hidden');
+        this.game.loadSong(this.currentSong);
+        this._hookGame();
+        this.el.hScore.textContent = '0'; this.el.hCombo.textContent = '0'; this.el.hAcc.textContent = '100%';
+        this._countdown(() => { this.game.start(); this._loop(); });
+      }
+    };
+    document.getElementById('btn-menu').onclick = () => this._toMenu();
+
+    document.addEventListener('keydown', e => {
+      if (e.key === 'Escape') {
+        if (this.game.isPlaying && !this.game.isPaused) {
+          this.game.pause(); this.el.pause.classList.remove('hidden');
+        } else if (this.game.isPaused) {
+          this.game.resume(); this.el.pause.classList.add('hidden'); this._loop();
+        }
+      }
+    });
+  }
+
+  _toMenu() {
+    this.game.stop();
+    if (this._raf) cancelAnimationFrame(this._raf);
+    this.pitch.onNoteDetected = null;
+    this.midi.onNoteOn = null; this.midi.onNoteOff = null;
+    ['menu'].forEach(k => this.el[k].classList.remove('hidden'));
+    ['game','header','pause','countdown','results','pitchDbg'].forEach(k => this.el[k]?.classList.add('hidden'));
+    this.el.pitchDbg.classList.add('hidden');
+  }
+
+  _showResults() {
+    const g = this.game.getGrade();
+    const ge = document.getElementById('res-grade');
+    ge.textContent = g; ge.className = 'grade grade-' + g.toLowerCase();
+    document.getElementById('res-song').textContent = this.currentSong?.title || '';
+    document.getElementById('res-score').textContent = this.game.score.toLocaleString();
+    document.getElementById('res-acc').textContent = this.game.getAccuracy() + '%';
+    document.getElementById('res-combo').textContent = this.game.maxCombo;
+    document.getElementById('res-perfect').textContent = this.game.perfects;
+    document.getElementById('res-good').textContent = this.game.goods;
+    document.getElementById('res-miss').textContent = this.game.misses;
+    this.el.results.classList.remove('hidden');
+  }
+}
+
+// ═══ 앱 시작 ═══
+document.addEventListener('DOMContentLoaded', () => { window.app = new App(); });
+</script>
+</body>
+</html>
