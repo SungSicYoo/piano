@@ -214,9 +214,11 @@ html, body {
 
 /* ═══ VIRTUAL PIANO ═══ */
 #piano-container {
-  flex-shrink: 0; background: var(--bg);
-  border-top: 1px solid var(--border);
+  flex-shrink: 0;
+  background: linear-gradient(180deg, #1a1a2e 0%, #0e0e1a 100%);
+  border-top: 2px solid #333;
   position: relative; z-index: 5;
+  padding: 4px 2px 0 2px;
 }
 #piano {
   display: flex; height: clamp(90px, 18vh, 150px);
@@ -224,48 +226,76 @@ html, body {
 }
 .key {
   position: relative; flex: 1;
-  border: 1px solid rgba(0,0,0,0.15); border-top: none;
-  cursor: pointer; transition: background 0.06s;
+  cursor: pointer; transition: background 0.06s, box-shadow 0.1s;
   display: flex; align-items: flex-end;
-  justify-content: center; padding-bottom: 6px; z-index: 1;
+  justify-content: center; padding-bottom: 8px; z-index: 1;
 }
 .key.white {
-  background: linear-gradient(180deg, #fafafa 0%, #e8e8ee 100%);
-  border-radius: 0 0 6px 6px;
-  border-right: 1px solid rgba(0,0,0,0.08);
+  background: linear-gradient(180deg, #ffffff 0%, #f0f0f0 60%, #e0e0e5 100%);
+  border-radius: 0 0 7px 7px;
+  border: 1px solid #bbb;
+  border-top: none;
+  margin: 0 1px;
+  box-shadow: 0 4px 6px rgba(0,0,0,0.15), inset 0 -2px 3px rgba(0,0,0,0.05);
 }
 .key.white .key-label {
-  font-size: 10px; font-weight: 500; color: rgba(0,0,0,0.3);
+  font-size: 10px; font-weight: 600; color: rgba(0,0,0,0.25);
   font-family: 'JetBrains Mono', monospace;
 }
 .key.white.active {
-  background: linear-gradient(180deg, #00e8b0 0%, #00c49a 100%);
+  background: linear-gradient(180deg, #b8f5e0 0%, #00e8b0 100%);
+  box-shadow: 0 2px 4px rgba(0,0,0,0.1), inset 0 0 12px rgba(0,232,176,0.3);
 }
-.key.white.active .key-label { color: rgba(0,0,0,0.7); }
+.key.white.active .key-label { color: rgba(0,0,0,0.6); }
 .key.white.target-hit {
-  background: linear-gradient(180deg, #00e8b0 0%, #00c49a 100%);
-  box-shadow: 0 0 20px rgba(0,232,176,0.5) inset;
+  background: linear-gradient(180deg, #5bffca 0%, #00d4a0 100%);
+  box-shadow: 0 0 20px rgba(0,232,176,0.5);
 }
 .key.white.target-miss {
-  background: linear-gradient(180deg, #f43f5e 0%, #dc2626 100%);
+  background: linear-gradient(180deg, #ff9faf 0%, #f43f5e 100%);
+  box-shadow: 0 0 16px rgba(244,63,94,0.4);
 }
+/* ── 다음에 눌러야 할 건반 하이라이트 ── */
+.key.white.next-target {
+  background: linear-gradient(180deg, #ffe4a0 0%, #ffcc44 60%, #f0b800 100%);
+  box-shadow: 0 0 18px rgba(255,200,0,0.5), inset 0 0 10px rgba(255,220,100,0.3);
+  animation: keyGlow 1s ease-in-out infinite;
+}
+.key.white.next-target .key-label { color: rgba(0,0,0,0.7); font-weight: 800; }
+
 .key.black {
   position: absolute; width: 8%; height: 60%;
-  background: linear-gradient(180deg, #2a2a40 0%, #18182a 100%);
-  border-radius: 0 0 4px 4px; z-index: 2;
-  box-shadow: 0 4px 8px rgba(0,0,0,0.5);
+  background: linear-gradient(180deg, #333 0%, #1a1a1a 50%, #111 100%);
+  border-radius: 0 0 5px 5px; z-index: 2;
+  border: 1px solid #000;
+  box-shadow: 0 4px 8px rgba(0,0,0,0.6), inset 0 -1px 2px rgba(255,255,255,0.05);
 }
 .key.black .key-label {
-  font-size: 8px; font-weight: 500; color: rgba(255,255,255,0.2);
+  font-size: 8px; font-weight: 500; color: rgba(255,255,255,0.25);
   font-family: 'JetBrains Mono', monospace;
 }
 .key.black.active {
-  background: linear-gradient(180deg, #8b5cf6 0%, #6d28d9 100%);
-  box-shadow: 0 2px 4px rgba(0,0,0,0.5);
+  background: linear-gradient(180deg, #a78bfa 0%, #7c3aed 100%);
+  box-shadow: 0 2px 4px rgba(0,0,0,0.5), inset 0 0 10px rgba(139,92,246,0.3);
 }
 .key.black.target-hit {
-  background: linear-gradient(180deg, #00e8b0 0%, #00c49a 100%);
-  box-shadow: 0 0 16px rgba(0,232,176,0.4) inset;
+  background: linear-gradient(180deg, #5bffca 0%, #00d4a0 100%);
+  box-shadow: 0 0 16px rgba(0,232,176,0.5);
+}
+.key.black.target-miss {
+  background: linear-gradient(180deg, #ff6680 0%, #dc2626 100%);
+}
+/* ── 다음에 눌러야 할 흑건 하이라이트 ── */
+.key.black.next-target {
+  background: linear-gradient(180deg, #ffd060 0%, #f0a000 100%);
+  box-shadow: 0 0 14px rgba(255,200,0,0.6), inset 0 0 8px rgba(255,220,100,0.3);
+  animation: keyGlow 1s ease-in-out infinite;
+}
+.key.black.next-target .key-label { color: rgba(0,0,0,0.8); font-weight: 800; }
+
+@keyframes keyGlow {
+  0%, 100% { filter: brightness(1); }
+  50% { filter: brightness(1.15); }
 }
 
 /* ═══ OVERLAYS ═══ */
@@ -709,36 +739,46 @@ class PitchDetector {
     this.mediaStream = null; this.buffer = null;
     this.isActive = false; this.lastDetectedMidi = -1;
     this.onNoteDetected = null;
-    this.onDebugUpdate = null; // 디버그 콜백: (info) => {}
-    this.threshold = 0.20; // YIN 임계값 (0.12→0.20 완화: 실제 환경 잡음 대응)
+    this.onDebugUpdate = null;
+    this.threshold = 0.20;
     this._rafId = null;
-    this._lastNoteMidi = -1;
-    this._lastNoteTime = 0;
     this._rms = 0;
+
+    // ── 음 떨림 보정 (Vibrato Smoothing) ──
+    // 피아노 음은 진동(vibrato)과 배음 간섭으로 감지된 MIDI가
+    // 프레임마다 ±1~2 반음 흔들릴 수 있음. 이를 보정:
+    //
+    // 1) 메디안 필터: 최근 5개 감지값의 중앙값 사용 (이상값 제거)
+    // 2) 히스테리시스: 현재 확정된 음에서 2반음 이상 차이 나야 변경
+    //    (1반음 흔들림은 무시)
+    // 3) 확정 쿨다운: 음이 변경된 후 150ms간 재변경 방지
+    this._history = [];          // 최근 감지 MIDI 히스토리
+    this._historySize = 5;       // 메디안 필터 윈도우 크기
+    this._confirmedMidi = -1;    // 현재 확정된 MIDI 음
+    this._confirmTime = 0;       // 마지막 확정 시각
+    this._confirmCooldown = 150; // 확정 후 쿨다운(ms)
+    this._hysteresis = 2;        // 히스테리시스 반음 수
   }
 
   async start() {
     try {
       this.mediaStream = await navigator.mediaDevices.getUserMedia({
         audio: {
-          echoCancellation: false, // 피아노 음색 왜곡 방지
-          noiseSuppression: false, // 피아노 배음 제거 방지
-          autoGainControl: true,   // 음량 자동 조절 ON (소리가 작을 수 있으므로)
+          echoCancellation: false,
+          noiseSuppression: false,
+          autoGainControl: true,
         }
       });
       this.audioCtx = new (window.AudioContext || window.webkitAudioContext)();
       const src = this.audioCtx.createMediaStreamSource(this.mediaStream);
-
-      // ── AnalyserNode 설정 ──
-      // fftSize=4096: 48kHz 기준 ~85ms 윈도우
-      // → 최저 감지 가능 주파수 ≈ 48000/2048 ≈ 23Hz (A0=27Hz 커버)
       this.analyser = this.audioCtx.createAnalyser();
-      this.analyser.fftSize = 4096; // 2048→4096: 저음역 해상도 2배 향상
-      this.analyser.smoothingTimeConstant = 0; // 스무딩 OFF (즉각 반응)
+      this.analyser.fftSize = 4096;
+      this.analyser.smoothingTimeConstant = 0;
       src.connect(this.analyser);
-
       this.buffer = new Float32Array(this.analyser.fftSize);
       this.isActive = true;
+      this._history = [];
+      this._confirmedMidi = -1;
       this._detect();
       return true;
     } catch (e) { console.warn('마이크 접근 실패:', e); return false; }
@@ -752,115 +792,109 @@ class PitchDetector {
     this.audioCtx = null;
   }
 
+  /**
+   * 메디안 필터: 배열의 중앙값 반환
+   * 이상값(옥타브 점프 등)을 효과적으로 제거
+   */
+  _median(arr) {
+    if (arr.length === 0) return -1;
+    const sorted = [...arr].sort((a, b) => a - b);
+    const mid = Math.floor(sorted.length / 2);
+    return sorted.length % 2 ? sorted[mid] : Math.round((sorted[mid - 1] + sorted[mid]) / 2);
+  }
+
   _detect() {
     if (!this.isActive) return;
     this.analyser.getFloatTimeDomainData(this.buffer);
 
-    // ── RMS 볼륨 계산 ──
     let rms = 0;
     for (let i = 0; i < this.buffer.length; i++) rms += this.buffer[i] ** 2;
     rms = Math.sqrt(rms / this.buffer.length);
     this._rms = rms;
 
-    // RMS 임계값: 0.01→0.003 (마이크가 멀거나 소리가 작아도 감지)
     if (rms > 0.003) {
       const pitch = this._yinDetect(this.buffer, this.audioCtx.sampleRate);
       if (pitch > 0) {
-        const midi = NoteUtils.freqToMidi(pitch);
-        if (midi >= 21 && midi <= 108) {
-          this.lastDetectedMidi = midi;
-          // 디버그 정보 전달
-          if (this.onDebugUpdate) {
-            this.onDebugUpdate({ midi, freq: pitch, rms, noteName: NoteUtils.midiToName(midi), detected: true });
+        const rawMidi = NoteUtils.freqToMidi(pitch);
+        if (rawMidi >= 21 && rawMidi <= 108) {
+
+          // ── Step 1: 메디안 필터에 추가 ──
+          this._history.push(rawMidi);
+          if (this._history.length > this._historySize) this._history.shift();
+
+          // 최소 3개 샘플이 모여야 메디안 의미 있음
+          if (this._history.length >= 3) {
+            const median = this._median(this._history);
+
+            // ── Step 2: 히스테리시스 검사 ──
+            // 현재 확정 음과 메디안의 차이가 히스테리시스 이상일 때만 변경
+            // → ±1 반음 떨림은 무시됨
+            const now = performance.now();
+            const diff = Math.abs(median - this._confirmedMidi);
+            const cooled = (now - this._confirmTime) > this._confirmCooldown;
+
+            if (this._confirmedMidi === -1 || (diff >= this._hysteresis && cooled)) {
+              // 새로운 음 확정
+              this._confirmedMidi = median;
+              this._confirmTime = now;
+            }
+
+            // ── Step 3: 확정된 음 콜백 ──
+            this.lastDetectedMidi = this._confirmedMidi;
+            this.onDebugUpdate?.({
+              midi: this._confirmedMidi, freq: pitch, rms,
+              noteName: NoteUtils.midiToName(this._confirmedMidi),
+              rawMidi, detected: true
+            });
+            this.onNoteDetected?.(this._confirmedMidi);
           }
-          // 즉시 콜백 (안정성 필터 제거 → 반응성 우선)
-          if (this.onNoteDetected) this.onNoteDetected(midi);
         }
       } else {
-        // 피치 감지 실패 (소리는 있지만 음 판별 불가)
-        if (this.onDebugUpdate) {
-          this.onDebugUpdate({ midi: -1, freq: -1, rms, noteName: '--', detected: false });
-        }
+        this.onDebugUpdate?.({ midi: -1, freq: -1, rms, noteName: '--', detected: false });
       }
     } else {
+      // 무음 → 히스토리 리셋 (새 음 시작 대비)
       this.lastDetectedMidi = -1;
-      if (this.onDebugUpdate) {
-        this.onDebugUpdate({ midi: -1, freq: -1, rms, noteName: '--', detected: false });
-      }
+      this._history = [];
+      this._confirmedMidi = -1;
+      this.onDebugUpdate?.({ midi: -1, freq: -1, rms, noteName: '--', detected: false });
     }
     this._rafId = requestAnimationFrame(() => this._detect());
   }
 
-  /**
-   * YIN 피치 감지 구현 (개선 버전)
-   *
-   * 개선점:
-   * - 버퍼 4096 → half=2048로 저음역 해상도 향상
-   * - threshold 0.20으로 완화 (실환경 잡음 대응)
-   * - global minimum fallback: threshold 이하 valley 없으면
-   *   전체에서 가장 작은 d'(τ)를 사용 (0.4 이하일 때만)
-   *
-   * @param {Float32Array} buf - 시간 도메인 오디오 버퍼
-   * @param {number} sr - 샘플레이트
-   * @returns {number} 추정 주파수(Hz), 실패시 -1
-   */
+  /** YIN 피치 감지 (이전과 동일) */
   _yinDetect(buf, sr) {
     const half = buf.length >> 1;
     const d = new Float32Array(half);
-
-    // ── Step 1: 차분 함수 ──
     for (let tau = 0; tau < half; tau++) {
       let sum = 0;
-      for (let j = 0; j < half; j++) {
-        const diff = buf[j] - buf[j + tau];
-        sum += diff * diff;
-      }
+      for (let j = 0; j < half; j++) { const df = buf[j] - buf[j + tau]; sum += df * df; }
       d[tau] = sum;
     }
-
-    // ── Step 2: CMNDF ──
     d[0] = 1;
     let running = 0;
     for (let tau = 1; tau < half; tau++) {
       running += d[tau];
-      if (running === 0) { d[tau] = 1; continue; } // division by zero 방지
+      if (running === 0) { d[tau] = 1; continue; }
       d[tau] = d[tau] * tau / running;
     }
-
-    // ── Step 3: 절대 임계값 탐색 + Global Minimum Fallback ──
     const tauMin = Math.max(2, Math.floor(sr / 4200));
     const tauMax = Math.min(half, Math.floor(sr / 50));
-    let bestTau = -1;
-    let globalMinTau = tauMin;
-    let globalMinVal = d[tauMin];
-
+    let bestTau = -1, gMinTau = tauMin, gMinVal = d[tauMin];
     for (let tau = tauMin; tau < tauMax; tau++) {
-      // Global minimum 추적
-      if (d[tau] < globalMinVal) {
-        globalMinVal = d[tau];
-        globalMinTau = tau;
-      }
-
+      if (d[tau] < gMinVal) { gMinVal = d[tau]; gMinTau = tau; }
       if (d[tau] < this.threshold) {
         while (tau + 1 < tauMax && d[tau + 1] < d[tau]) tau++;
-        bestTau = tau;
-        break;
+        bestTau = tau; break;
       }
     }
-
-    // Fallback: threshold 이하 valley 없으면 global min 사용 (0.4 이하만)
-    if (bestTau === -1 && globalMinVal < 0.4) {
-      bestTau = globalMinTau;
-    }
+    if (bestTau === -1 && gMinVal < 0.4) bestTau = gMinTau;
     if (bestTau === -1) return -1;
-
-    // ── Step 4: 포물선 보간 ──
     const x0 = bestTau > 0 ? d[bestTau - 1] : d[bestTau];
     const x1 = d[bestTau];
     const x2 = bestTau + 1 < half ? d[bestTau + 1] : d[bestTau];
     const denom = 2 * (x0 - 2 * x1 + x2);
     const refined = denom !== 0 ? bestTau + (x0 - x2) / denom : bestTau;
-
     return sr / refined;
   }
 }
@@ -1716,6 +1750,7 @@ class App {
     this.currentSong = null;
     this._raf = null;
     this._micDebounce = {};
+    this._lastTargetMidi = -1;
 
     this.el = {
       menu: document.getElementById('menu-screen'),
@@ -1970,7 +2005,6 @@ class App {
 
   // ── Game Loop ──
   _loop() {
-    // Keep running during wait mode (for rendering), only stop on game end
     if (!this.game.isPlaying && !this.game.isPaused && !this.game.isWaiting) return;
     this.game.update(performance.now());
 
@@ -1985,6 +2019,26 @@ class App {
       }
       this.renderer.render(this.game.notes, this.game.currentTime, this.game.particles);
     }
+
+    // ── 다음에 눌러야 할 건반 하이라이트 (어린이 가이드) ──
+    if (this.kb && this.game.notes.length > 0) {
+      const next = this.game._getNextPendingNote();
+      const nextMidi = next ? next.midi : -1;
+
+      // 이전 하이라이트와 다를 때만 DOM 업데이트
+      if (nextMidi !== this._lastTargetMidi) {
+        // 이전 하이라이트 제거
+        if (this._lastTargetMidi > 0) {
+          this.kb.unhighlightKey(this._lastTargetMidi, 'next-target');
+        }
+        // 새 하이라이트 적용
+        if (nextMidi > 0) {
+          this.kb.highlightKey(nextMidi, 'next-target');
+        }
+        this._lastTargetMidi = nextMidi;
+      }
+    }
+
     this._raf = requestAnimationFrame(() => this._loop());
   }
 
@@ -2049,6 +2103,7 @@ class App {
       if (this.currentSong) {
         this.el.results.classList.add('hidden');
         this._hideExpectedNote();
+        this._lastTargetMidi = -1;
         this.game.loadSong(this.currentSong);
         this.game.setTimingMode(this.inputMode, this.playMode);
         this._hookGame();
@@ -2073,6 +2128,7 @@ class App {
     this.game.stop();
     if (this._raf) cancelAnimationFrame(this._raf);
     this._hideExpectedNote();
+    this._lastTargetMidi = -1;
     this.pitch.onNoteDetected = null;
     this.pitch.onDebugUpdate = null;
     this.midi.onNoteOn = null; this.midi.onNoteOff = null;
