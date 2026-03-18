@@ -167,21 +167,16 @@ html, body {
   position: relative; z-index: 1; min-height: 0;
 }
 #canvas-wrap {
-  flex: 1; position: relative; min-height: 0; background: var(--bg);
+  flex: 1; position: relative; min-height: 0;
+  background: #f5f2eb; /* 악보 배경 — 밝은 파피루스색 */
 }
 #note-canvas { width: 100%; height: 100%; display: block; }
-#canvas-wrap::after {
-  content: ''; position: absolute; bottom: 0; left: 0; right: 0; height: 3px;
-  background: var(--accent);
-  box-shadow: 0 0 12px var(--accent-glow), 0 0 30px var(--accent-glow);
-  z-index: 2;
-}
 .judge-popup {
   position: absolute; left: 50%; transform: translateX(-50%);
   font-family: 'DM Sans', sans-serif; font-weight: 800; font-size: 28px;
   pointer-events: none; z-index: 10;
   animation: judgePop 0.6s ease-out forwards;
-  text-shadow: 0 0 20px currentColor;
+  text-shadow: 0 2px 8px rgba(0,0,0,0.2);
 }
 @keyframes judgePop {
   0% { opacity:1; transform: translateX(-50%) translateY(0) scale(1.3); }
@@ -347,13 +342,12 @@ html, body {
   transform: translateX(-50%);
   font-family: 'DM Sans', sans-serif;
   font-size: 16px; font-weight: 700;
-  color: var(--accent);
-  background: rgba(0,232,176,0.1);
-  border: 1px solid rgba(0,232,176,0.3);
+  color: #0a7b5a;
+  background: rgba(0,232,176,0.18);
+  border: 1px solid rgba(0,180,140,0.4);
   padding: 8px 20px; border-radius: 12px;
   z-index: 8; white-space: nowrap;
   animation: hintFadeIn 0.3s ease-out;
-  text-shadow: 0 0 10px var(--accent-glow);
 }
 @keyframes hintFadeIn {
   from { opacity: 0; transform: translateX(-50%) translateY(10px); }
@@ -992,8 +986,22 @@ class PianoKeyboard {
 
 
 // ═══════════════════════════════════════════
-// 7. NoteRenderer — Canvas 떨어지는 노트
+// 7. NoteRenderer — 오선지 악보 (오른쪽→왼쪽 스크롤)
 // ═══════════════════════════════════════════
+/**
+ * Simply Piano 스타일 악보 렌더러
+ *
+ * 구조:
+ * - 높은음자리표(Treble) 오선 + 낮은음자리표(Bass) 오선 = Grand Staff
+ * - 파란색 수직 커서(Playback Line) — 왼쪽 약 18% 위치 고정
+ * - 음표가 오른쪽에서 왼쪽으로 스크롤, 커서에 도달 시 연주 타이밍
+ *
+ * MIDI → 오선 위치 매핑:
+ * - 각 옥타브 12반음 → 7개 온음계(diatonic) 위치로 변환
+ * - C=0, D=1, E=2, F=3, G=4, A=5, B=6
+ * - 높은음자리표 아래선(E4) = 기준점
+ * - 각 온음계 스텝 = 오선 줄 간격의 절반
+ */
 class NoteRenderer {
   constructor(canvas, startMidi, endMidi) {
     this.canvas = canvas;
@@ -1001,13 +1009,31 @@ class NoteRenderer {
     this.startMidi = startMidi;
     this.endMidi = endMidi;
 
-    this.whites = []; this.blacks = [];
-    for (let m = startMidi; m <= endMidi; m++) {
-      (NoteUtils.isBlack(NoteUtils.midiToName(m)) ? this.blacks : this.whites).push(m);
-    }
-    this.totalW = this.whites.length;
-    this.scrollSpeed = 0.25; // px per ms
+    // 스크롤 속도: px per ms (오른쪽→왼쪽)
+    this.hSpeed = 0.18;
+
+    // 레이아웃 값 (resize에서 계산)
     this.W = 0; this.H = 0;
+    this.cursorX = 0;       // 판정선(커서) X 위치
+    this.staffSpacing = 0;  // 오선 줄 간격
+    this.halfStep = 0;      // 온음계 한 스텝 = staffSpacing / 2
+    this.trebleLines = [];  // 높은음자리표 5개 선의 Y 좌표
+    this.bassLines = [];    // 낮은음자리표 5개 선의 Y 좌표
+    this.trebleBottomY = 0; // E4의 Y좌표
+    this.bassBottomY = 0;   // G2의 Y좌표
+    this.noteRadius = 0;    // 음표 머리 반지름
+
+    // 온음계 매핑: MIDI noteInOctave(0-11) → diatonic index(0-6)
+    // C, C#→C, D, D#→D, E, F, F#→F, G, G#→G, A, A#→A, B
+    this.SEMI_TO_DIA = [0,0,1,1,2,3,3,4,4,5,5,6];
+
+    // E4의 절대 온음계 위치 (기준점)
+    // E4 = octave4 * 7 + 2 = 30
+    this.E4_DIA = 30;
+    // G2의 절대 온음계 위치 (낮은음자리표 아래선 기준)
+    // G2 = octave2 * 7 + 4 = 18
+    this.G2_DIA = 18;
+
     this._resize();
     this._resizeHandler = () => this._resize();
     window.addEventListener('resize', this._resizeHandler);
@@ -1023,101 +1049,368 @@ class NoteRenderer {
     this.canvas.style.width = r.width + 'px';
     this.canvas.style.height = r.height + 'px';
     this.ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-    this.W = r.width; this.H = r.height;
+    this.W = r.width;
+    this.H = r.height;
+
+    // ── 레이아웃 계산 ──
+    // 커서 위치: 왼쪽에서 18%
+    this.cursorX = this.W * 0.18;
+
+    // 오선 줄 간격 계산
+    // 높은음자리표 4간격 + 중간 갭 3간격 + 낮은음자리표 4간격 = 11간격
+    // 위아래 여백 포함
+    const topMargin = this.H * 0.14;
+    const bottomMargin = this.H * 0.06;
+    const usable = this.H - topMargin - bottomMargin;
+    this.staffSpacing = usable / 11;
+    this.halfStep = this.staffSpacing / 2;
+    this.noteRadius = this.staffSpacing * 0.42;
+
+    // 높은음자리표: 위에서부터 5줄
+    const trebleTopY = topMargin;
+    this.trebleLines = [];
+    for (let i = 0; i < 5; i++) {
+      this.trebleLines.push(trebleTopY + i * this.staffSpacing);
+    }
+    // 아래선(E4) = 5번째 줄 (index 4)
+    this.trebleBottomY = this.trebleLines[4];
+
+    // 낮은음자리표: 높은음자리표 아래 3간격 갭 후 5줄
+    const bassTopY = this.trebleLines[4] + 3 * this.staffSpacing;
+    this.bassLines = [];
+    for (let i = 0; i < 5; i++) {
+      this.bassLines.push(bassTopY + i * this.staffSpacing);
+    }
+    this.bassBottomY = this.bassLines[4];
   }
 
-  /** MIDI 번호 → (x, width) */
+  /**
+   * MIDI 번호 → 절대 온음계 위치
+   * C4=28, D4=29, E4=30, ..., C5=35, ...
+   */
+  _midiToDiatonic(midi) {
+    const octave = Math.floor(midi / 12) - 1;
+    const noteInOctave = midi % 12;
+    return octave * 7 + this.SEMI_TO_DIA[noteInOctave];
+  }
+
+  /**
+   * MIDI 번호 → 오선 위의 Y 좌표
+   * E4(높은음자리표 아래선)를 기준으로 계산
+   */
+  getNoteY(midi) {
+    const dia = this._midiToDiatonic(midi);
+    // E4(diatonic=30)가 trebleBottomY에 위치
+    // 위로 갈수록 diatonic 증가, Y 감소
+    return this.trebleBottomY - (dia - this.E4_DIA) * this.halfStep;
+  }
+
+  /**
+   * 파티클 위치용 — 커서 X와 음표 Y 반환
+   */
   getNoteXW(midi) {
-    const name = NoteUtils.midiToName(midi);
-    const ww = this.W / this.totalW;
-    if (!NoteUtils.isBlack(name)) {
-      const i = this.whites.indexOf(midi);
-      return { x: i * ww, w: ww };
-    } else {
-      const i = this.whites.indexOf(midi - 1);
-      if (i === -1) return { x: 0, w: 0 };
-      const bw = ww * 0.65;
-      return { x: (i + 1) * ww - bw / 2, w: bw };
-    }
+    const y = this.getNoteY(midi);
+    return { x: this.cursorX - this.noteRadius, w: this.noteRadius * 2, y };
   }
 
-  render(notes, currentTime, particles = []) {
-    const ctx = this.ctx;
-    ctx.clearRect(0, 0, this.W, this.H);
+  /**
+   * 음표 duration → 음표 종류
+   * whole(온음표), half(2분음표), quarter(4분음표), eighth(8분음표)
+   */
+  _getNoteType(duration) {
+    if (duration >= 1500) return 'whole';
+    if (duration >= 700) return 'half';
+    if (duration >= 250) return 'quarter';
+    return 'eighth';
+  }
 
-    // 배경 그리드
-    ctx.strokeStyle = 'rgba(255,255,255,0.025)';
-    ctx.lineWidth = 1;
-    const ww = this.W / this.totalW;
-    for (let i = 1; i < this.totalW; i++) {
-      ctx.beginPath(); ctx.moveTo(i * ww, 0); ctx.lineTo(i * ww, this.H); ctx.stroke();
-    }
+  /**
+   * 해당 Y 위치에 필요한 보조선(ledger line) 그리기
+   */
+  _drawLedgerLines(ctx, x, y, midi) {
+    const dia = this._midiToDiatonic(midi);
+    const sp = this.staffSpacing;
+    const hw = this.noteRadius * 1.6; // 보조선 너비
+    ctx.strokeStyle = '#777';
+    ctx.lineWidth = 1.2;
 
-    // 노트 렌더링
-    for (const note of notes) {
-      const midi = NoteUtils.nameToMidi(note.note);
-      const { x, w } = this.getNoteXW(midi);
-      if (w === 0) continue;
-
-      const tDiff = note.time - currentTime;
-      const topY = this.H - tDiff * this.scrollSpeed;
-      const nh = Math.max(note.duration * this.scrollSpeed, 12);
-      const botY = topY + nh;
-
-      if (botY < -20 || topY > this.H + 20) continue;
-
-      let color = NoteUtils.noteColor(note.note), alpha = 1;
-      if (note.state === 'hit') { color = '#00e8b0'; alpha = 0.9; }
-      else if (note.state === 'good') { color = '#facc15'; alpha = 0.9; }
-      else if (note.state === 'miss') { color = '#f43f5e'; alpha = 0.4; }
-
-      const isB = NoteUtils.isBlack(note.note);
-      const pad = isB ? 1 : 2, rad = 5;
-      const nx = x + pad, nw = w - pad * 2;
-
-      if (note.state !== 'miss') { ctx.shadowColor = color; ctx.shadowBlur = 12; }
-      ctx.globalAlpha = alpha;
-      ctx.fillStyle = color;
-
-      // 둥근 사각형
-      ctx.beginPath();
-      ctx.moveTo(nx + rad, topY);
-      ctx.lineTo(nx + nw - rad, topY);
-      ctx.quadraticCurveTo(nx + nw, topY, nx + nw, topY + rad);
-      ctx.lineTo(nx + nw, topY + nh - rad);
-      ctx.quadraticCurveTo(nx + nw, topY + nh, nx + nw - rad, topY + nh);
-      ctx.lineTo(nx + rad, topY + nh);
-      ctx.quadraticCurveTo(nx, topY + nh, nx, topY + nh - rad);
-      ctx.lineTo(nx, topY + rad);
-      ctx.quadraticCurveTo(nx, topY, nx + rad, topY);
-      ctx.closePath();
-      ctx.fill();
-      ctx.shadowBlur = 0;
-      ctx.globalAlpha = 1;
-
-      // 음이름
-      if (nh > 20 && nw > 20) {
-        ctx.fillStyle = note.state === 'miss' ? 'rgba(255,255,255,0.3)' : 'rgba(0,0,0,0.5)';
-        ctx.font = '600 11px "DM Sans"';
-        ctx.textAlign = 'center';
-        ctx.fillText(note.note, nx + nw / 2, topY + nh / 2 + 4);
+    // 높은음자리표 위 (F5=diatonic38 위, 즉 trebleLines[0] 위)
+    if (dia > this.E4_DIA + 8) { // F5 위쪽
+      for (let d = this.E4_DIA + 10; d <= dia; d += 2) { // 선 위치만
+        const ly = this.trebleBottomY - (d - this.E4_DIA) * this.halfStep;
+        if (ly < this.trebleLines[0] - sp * 0.3) {
+          ctx.beginPath(); ctx.moveTo(x - hw, ly); ctx.lineTo(x + hw, ly); ctx.stroke();
+        }
       }
     }
 
-    // 파티클
+    // 높은음자리표 아래 (E4 아래) — 예: middle C(C4)
+    if (dia < this.E4_DIA) {
+      for (let d = this.E4_DIA - 2; d >= dia; d -= 2) {
+        const ly = this.trebleBottomY - (d - this.E4_DIA) * this.halfStep;
+        if (ly > this.trebleBottomY + sp * 0.3) {
+          ctx.beginPath(); ctx.moveTo(x - hw, ly); ctx.lineTo(x + hw, ly); ctx.stroke();
+        }
+      }
+    }
+
+    // 낮은음자리표 위 (A3=diatonic26 위)
+    if (dia > this.G2_DIA + 8 && dia <= this.E4_DIA) {
+      for (let d = this.G2_DIA + 10; d <= dia; d += 2) {
+        const ly = this.bassBottomY - (d - this.G2_DIA) * this.halfStep;
+        if (ly < this.bassLines[0] - sp * 0.3) {
+          ctx.beginPath(); ctx.moveTo(x - hw, ly); ctx.lineTo(x + hw, ly); ctx.stroke();
+        }
+      }
+    }
+
+    // 낮은음자리표 아래 (G2 아래)
+    if (dia < this.G2_DIA) {
+      for (let d = this.G2_DIA - 2; d >= dia; d -= 2) {
+        const ly = this.bassBottomY - (d - this.G2_DIA) * this.halfStep;
+        if (ly > this.bassBottomY + sp * 0.3) {
+          ctx.beginPath(); ctx.moveTo(x - hw, ly); ctx.lineTo(x + hw, ly); ctx.stroke();
+        }
+      }
+    }
+  }
+
+  /**
+   * 단일 음표 그리기
+   */
+  _drawNote(ctx, x, y, note, state, duration) {
+    const r = this.noteRadius;
+    const type = this._getNoteType(duration);
+
+    // ── 색상 결정 ──
+    let fillColor = '#222';
+    let strokeColor = '#222';
+    let alpha = 1;
+    let glowColor = null;
+
+    if (state === 'hit') {
+      fillColor = '#00b88a'; strokeColor = '#00b88a';
+      glowColor = 'rgba(0,184,138,0.4)';
+    } else if (state === 'good') {
+      fillColor = '#d4a017'; strokeColor = '#d4a017';
+      glowColor = 'rgba(212,160,23,0.3)';
+    } else if (state === 'miss') {
+      fillColor = '#e04060'; strokeColor = '#e04060';
+      alpha = 0.4;
+    }
+
+    ctx.globalAlpha = alpha;
+
+    // ── 히트 글로우 이펙트 ──
+    if (glowColor) {
+      ctx.fillStyle = glowColor;
+      ctx.beginPath();
+      ctx.ellipse(x, y, r * 2.2, r * 1.8, -0.15, 0, Math.PI * 2);
+      ctx.fill();
+    }
+
+    // ── 음표 머리 (Notehead) ──
+    // 온음표/2분음표 = 빈 머리, 4분음표/8분음표 = 채운 머리
+    const filled = (type === 'quarter' || type === 'eighth');
+    ctx.beginPath();
+    ctx.ellipse(x, y, r, r * 0.72, -0.25, 0, Math.PI * 2);
+    if (filled) {
+      ctx.fillStyle = fillColor;
+      ctx.fill();
+    } else {
+      ctx.strokeStyle = strokeColor;
+      ctx.lineWidth = 1.8;
+      ctx.stroke();
+    }
+
+    // ── 줄기 (Stem) — 온음표 제외 ──
+    if (type !== 'whole') {
+      ctx.strokeStyle = state === 'pending' ? '#222' : strokeColor;
+      ctx.lineWidth = 1.5;
+      const stemLen = this.staffSpacing * 3;
+      // 가운데 선(B4) 아래면 줄기 위로, 위면 줄기 아래로
+      const midY = (this.trebleLines[0] + this.trebleLines[4]) / 2;
+      const stemUp = y > midY;
+      ctx.beginPath();
+      if (stemUp) {
+        ctx.moveTo(x + r * 0.85, y - r * 0.3);
+        ctx.lineTo(x + r * 0.85, y - stemLen);
+      } else {
+        ctx.moveTo(x - r * 0.85, y + r * 0.3);
+        ctx.lineTo(x - r * 0.85, y + stemLen);
+      }
+      ctx.stroke();
+
+      // ── 꼬리 (Flag) — 8분음표 ──
+      if (type === 'eighth') {
+        ctx.lineWidth = 1.5;
+        ctx.beginPath();
+        if (stemUp) {
+          const sx = x + r * 0.85, sy = y - stemLen;
+          ctx.moveTo(sx, sy);
+          ctx.quadraticCurveTo(sx + 8, sy + stemLen * 0.3, sx + 2, sy + stemLen * 0.5);
+        } else {
+          const sx = x - r * 0.85, sy = y + stemLen;
+          ctx.moveTo(sx, sy);
+          ctx.quadraticCurveTo(sx - 8, sy - stemLen * 0.3, sx - 2, sy - stemLen * 0.5);
+        }
+        ctx.stroke();
+      }
+    }
+
+    ctx.globalAlpha = 1;
+  }
+
+  /**
+   * 높은음자리표 기호 그리기 (간소화)
+   */
+  _drawTrebleClef(ctx, x) {
+    const lines = this.trebleLines;
+    const centerY = (lines[0] + lines[4]) / 2;
+    ctx.font = `bold ${this.staffSpacing * 5.5}px serif`;
+    ctx.fillStyle = '#555';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    // 유니코드 높은음자리표 (안 되면 대체 텍스트)
+    try {
+      ctx.fillText('𝄞', x, centerY + this.staffSpacing * 0.6);
+    } catch (e) {
+      ctx.font = `bold ${this.staffSpacing * 2}px serif`;
+      ctx.fillText('G', x, centerY);
+    }
+  }
+
+  /**
+   * 낮은음자리표 기호 그리기 (간소화)
+   */
+  _drawBassClef(ctx, x) {
+    const lines = this.bassLines;
+    const centerY = (lines[0] + lines[4]) / 2;
+    ctx.font = `bold ${this.staffSpacing * 4}px serif`;
+    ctx.fillStyle = '#555';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    try {
+      ctx.fillText('𝄢', x, centerY - this.staffSpacing * 0.2);
+    } catch (e) {
+      ctx.font = `bold ${this.staffSpacing * 2}px serif`;
+      ctx.fillText('F', x, centerY);
+    }
+  }
+
+  /**
+   * 샤프/플랫 기호 확인 및 그리기
+   */
+  _drawAccidental(ctx, x, y, noteName) {
+    const pc = noteName.replace(/\d+$/, '');
+    if (!pc.includes('#')) return;
+    ctx.font = `bold ${this.staffSpacing * 1.3}px serif`;
+    ctx.fillStyle = '#444';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText('♯', x - this.noteRadius * 2.2, y);
+  }
+
+  // ═══ 메인 렌더 ═══
+  render(notes, currentTime, particles = []) {
+    const ctx = this.ctx;
+    const W = this.W, H = this.H;
+    ctx.clearRect(0, 0, W, H);
+
+    // ── 악보 배경 ──
+    ctx.fillStyle = '#f5f2eb';
+    ctx.fillRect(0, 0, W, H);
+
+    // ── 오선 그리기 (5줄씩 2세트) ──
+    ctx.strokeStyle = '#bbb';
+    ctx.lineWidth = 1;
+    for (const ly of this.trebleLines) {
+      ctx.beginPath(); ctx.moveTo(0, ly); ctx.lineTo(W, ly); ctx.stroke();
+    }
+    for (const ly of this.bassLines) {
+      ctx.beginPath(); ctx.moveTo(0, ly); ctx.lineTo(W, ly); ctx.stroke();
+    }
+
+    // ── 대괄호(Brace) — 좌측 ──
+    const braceTop = this.trebleLines[0];
+    const braceBot = this.bassLines[4];
+    ctx.strokeStyle = '#999';
+    ctx.lineWidth = 2.5;
+    ctx.beginPath();
+    const bx = 8;
+    const midBrace = (braceTop + braceBot) / 2;
+    ctx.moveTo(bx + 4, braceTop);
+    ctx.quadraticCurveTo(bx - 6, midBrace, bx + 4, braceBot);
+    ctx.stroke();
+
+    // ── 음자리표 ──
+    this._drawTrebleClef(ctx, this.cursorX * 0.42);
+    this._drawBassClef(ctx, this.cursorX * 0.42);
+
+    // ── 커서(Playback Line) — 반투명 파란 밴드 ──
+    const cursorW = 18;
+    const cursorGrad = ctx.createLinearGradient(
+      this.cursorX - cursorW / 2, 0, this.cursorX + cursorW / 2, 0);
+    cursorGrad.addColorStop(0, 'rgba(56, 189, 248, 0)');
+    cursorGrad.addColorStop(0.3, 'rgba(56, 189, 248, 0.25)');
+    cursorGrad.addColorStop(0.5, 'rgba(56, 189, 248, 0.35)');
+    cursorGrad.addColorStop(0.7, 'rgba(56, 189, 248, 0.25)');
+    cursorGrad.addColorStop(1, 'rgba(56, 189, 248, 0)');
+    ctx.fillStyle = cursorGrad;
+    ctx.fillRect(this.cursorX - cursorW / 2, braceTop - 10, cursorW, braceBot - braceTop + 20);
+
+    // 커서 중심선
+    ctx.strokeStyle = 'rgba(56, 189, 248, 0.6)';
+    ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    ctx.moveTo(this.cursorX, braceTop - 10);
+    ctx.lineTo(this.cursorX, braceBot + 10);
+    ctx.stroke();
+
+    // ── 음표 렌더링 ──
+    for (const note of notes) {
+      const midi = NoteUtils.nameToMidi(note.note);
+      // X 위치: 미래 음표는 오른쪽, 과거는 왼쪽
+      const noteX = this.cursorX + (note.time - currentTime) * this.hSpeed;
+
+      // 화면 밖이면 스킵 (왼쪽 여유 100px, 오른쪽 여유 50px)
+      if (noteX < -100 || noteX > W + 50) continue;
+
+      const noteY = this.getNoteY(midi);
+
+      // 지나간 판정 완료 음표 투명도
+      let state = note.state;
+      if (state === 'hit' && noteX < this.cursorX - 60) continue; // 너무 지나간 히트 숨김
+      if (state === 'miss' && noteX < this.cursorX - 120) continue;
+
+      // 보조선
+      this._drawLedgerLines(ctx, noteX, noteY, midi);
+
+      // 임시표(#)
+      this._drawAccidental(ctx, noteX, noteY, note.note);
+
+      // 음표 그리기
+      this._drawNote(ctx, noteX, noteY, note, state, note.duration);
+
+      // ── 음이름 표시 (커서 근처의 미판정 음표만) ──
+      if (Math.abs(noteX - this.cursorX) < this.W * 0.6 && state === 'pending') {
+        ctx.font = `600 ${Math.max(11, this.staffSpacing * 0.7)}px "DM Sans"`;
+        ctx.fillStyle = '#888';
+        ctx.textAlign = 'center';
+        // 높은음자리표 위에 표시
+        ctx.fillText(note.note, noteX, this.trebleLines[0] - this.staffSpacing * 0.8);
+      }
+    }
+
+    // ── 파티클 ──
     for (const p of particles) {
       ctx.globalAlpha = p.alpha;
       ctx.fillStyle = p.color;
-      ctx.beginPath(); ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2); ctx.fill();
+      ctx.beginPath();
+      ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
+      ctx.fill();
     }
     ctx.globalAlpha = 1;
-
-    // 판정선 그라데이션
-    const grad = ctx.createLinearGradient(0, this.H - 30, 0, this.H);
-    grad.addColorStop(0, 'rgba(0,232,176,0)');
-    grad.addColorStop(1, 'rgba(0,232,176,0.08)');
-    ctx.fillStyle = grad;
-    ctx.fillRect(0, this.H - 30, this.W, 30);
   }
 }
 
@@ -1600,9 +1893,9 @@ class App {
     if (this.renderer) {
       for (const p of this.game.particles) {
         if (p.noteMidi && !p._posSet) {
-          const { x, w } = this.renderer.getNoteXW(p.noteMidi);
-          p.x = x + w / 2 + p.vx * 3;
-          p.y = this.renderer.H - 10;
+          const info = this.renderer.getNoteXW(p.noteMidi);
+          p.x = info.x + info.w / 2 + p.vx * 3;
+          p.y = (info.y || this.renderer.H / 2) + p.vy;
           p._posSet = true;
         }
       }
